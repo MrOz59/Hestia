@@ -23,3 +23,40 @@ prompts/
 *.instructions.md
 *.agent.md
 copilot-instructions.md
+
+# Build artifacts and binary files
+**/release/
+**/debug/
+*.o
+*.obj
+*.so
+*.dll
+*.a
+*.exe
+*.AppImage
+*.AppImage?
+*.AppImage.old
+*.lib
+
+# Qt / IDE / Editor
+*.qmake.stash
+*.pro.user
+.idea/
+.DS_Store
+Thumbs.db
+*~
+*.swp
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Node / JS
+node_modules/
+
+# Misc caches/logs
+.cache/
+.pytest_cache/
+jsson-lsp.log

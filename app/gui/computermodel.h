@@ -2,6 +2,7 @@
 #include "streaming/session.h"
 
 #include <QAbstractListModel>
+#include <QVariantMap>
 
 class ComputerModel : public QAbstractListModel
 {
@@ -16,6 +17,11 @@ class ComputerModel : public QAbstractListModel
         WakeableRole,
         StatusUnknownRole,
         ServerSupportedRole,
+        HestiaEnhancedRole,
+        HestiaDisplayRecoveryRole,
+        HestiaServerCommandsRole,
+        HestiaPermissionSystemRole,
+        HestiaClipboardSyncRole,
         DetailsRole
     };
 
@@ -42,6 +48,22 @@ public:
     Q_INVOKABLE void wakeComputer(int computerIndex);
 
     Q_INVOKABLE void renameComputer(int computerIndex, QString name);
+
+    Q_INVOKABLE QVariantMap getHestiaDisplayStatus(int computerIndex);
+
+    Q_INVOKABLE bool recoverHestiaDisplay(int computerIndex);
+
+    Q_INVOKABLE QVariantMap getHestiaClientPermissions(int computerIndex);
+
+    Q_INVOKABLE QVariantMap getHestiaDiagnostics(int computerIndex);
+
+    Q_INVOKABLE bool pasteHestiaClipboard(int computerIndex);
+
+    Q_INVOKABLE bool sendHestiaClipboard(int computerIndex);
+
+    Q_INVOKABLE QVariantList getHestiaServerCommands(int computerIndex);
+
+    Q_INVOKABLE bool runHestiaServerCommand(int computerIndex, int commandId);
 
     Q_INVOKABLE Session* createSessionForCurrentGame(int computerIndex);
 

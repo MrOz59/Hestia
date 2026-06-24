@@ -2,6 +2,7 @@
 
 #include "nvhttp.h"
 #include "nvaddress.h"
+#include "hestiacapabilities.h"
 
 #include <QThread>
 #include <QReadWriteLock>
@@ -100,6 +101,9 @@ public:
     int serverCodecModeSupport;
     QString gpuModel;
     bool isSupportedServerVersion;
+    HestiaCapabilities hestiaCapabilities;
+
+    void setHestiaCapabilities(const HestiaCapabilities& capabilities);
 
     // Persisted traits
     NvAddress localAddress;

@@ -213,6 +213,12 @@ NvComputer::NvComputer(NvHTTP& http, QString serverInfo)
     this->isSupportedServerVersion = CompatFetcher::isGfeVersionSupported(this->gfeVersion);
 }
 
+void NvComputer::setHestiaCapabilities(const HestiaCapabilities& capabilities)
+{
+    QWriteLocker lock(&this->lock);
+    hestiaCapabilities = capabilities;
+}
+
 bool NvComputer::wake() const
 {
     QByteArray wolPayload;

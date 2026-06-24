@@ -5,6 +5,7 @@ import QtQuick.Controls.Material 2.2
 import AppModel 1.0
 import ComputerManager 1.0
 import SdlGamepadKeyNavigation 1.0
+import StreamingPreferences 1.0
 
 CenteredGridView {
     property int computerIndex
@@ -298,6 +299,21 @@ CenteredGridView {
                 NavigableMenuItem {
                     text: model.running ? qsTr("Resume Game") : qsTr("Launch Game")
                     onTriggered: launchOrResumeSelectedApp(true)
+                }
+                NavigableMenuItem {
+                    checkable: true
+                    checked: StreamingPreferences.hestiaLaunchMode === StreamingPreferences.HLM_GAMESCOPE
+                    text: qsTr("Launch with Gamescope")
+                    visible: !model.running && appModel.supportsHestiaGamescope()
+                    onTriggered: {
+                        StreamingPreferences.hestiaLaunchMode = checked ?
+                                    StreamingPreferences.HLM_GAMESCOPE : StreamingPreferences.HLM_NORMAL
+                    }
+
+                    ToolTip.text: qsTr("Runs this app inside Gamescope on this Hermes host.")
+                    ToolTip.delay: 1000
+                    ToolTip.timeout: 3000
+                    ToolTip.visible: hovered
                 }
                 NavigableMenuItem {
                     text: qsTr("Quit Game")

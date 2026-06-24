@@ -1,6 +1,9 @@
 #include "computermodel.h"
 
+#include <QJsonArray>
 #include <QThreadPool>
+#include <QClipboard>
+#include <QGuiApplication>
 
 ComputerModel::ComputerModel(QObject* object)
     : QAbstractListModel(object) {}
@@ -42,6 +45,20 @@ QVariant ComputerModel::data(const QModelIndex& index, int role) const
         return computer->state == NvComputer::CS_UNKNOWN;
     case ServerSupportedRole:
         return computer->isSupportedServerVersion;
+    case HestiaEnhancedRole:
+        return computer->hestiaCapabilities.supportsProtocolV1;
+    case HestiaDisplayRecoveryRole:
+        return computer->hestiaCapabilities.supportsProtocolV1 &&
+               computer->hestiaCapabilities.features.displayRecovery;
+    case HestiaServerCommandsRole:
+        return computer->hestiaCapabilities.supportsProtocolV1 &&
+               computer->hestiaCapabilities.features.serverCommands;
+    case HestiaPermissionSystemRole:
+        return computer->hestiaCapabilities.supportsProtocolV1 &&
+               computer->hestiaCapabilities.features.permissionSystem;
+    case HestiaClipboardSyncRole:
+        return computer->hestiaCapabilities.supportsProtocolV1 &&
+               computer->hestiaCapabilities.features.clipboardSync;
     case DetailsRole: {
         QString state, pairState;
 
@@ -109,6 +126,11 @@ QHash<int, QByteArray> ComputerModel::roleNames() const
     names[WakeableRole] = "wakeable";
     names[StatusUnknownRole] = "statusUnknown";
     names[ServerSupportedRole] = "serverSupported";
+    names[HestiaEnhancedRole] = "hestiaEnhanced";
+    names[HestiaDisplayRecoveryRole] = "hestiaDisplayRecovery";
+    names[HestiaServerCommandsRole] = "hestiaServerCommands";
+    names[HestiaPermissionSystemRole] = "hestiaPermissionSystem";
+    names[HestiaClipboardSyncRole] = "hestiaClipboardSync";
     names[DetailsRole] = "details";
 
     return names;
@@ -177,6 +199,120 @@ void ComputerModel::renameComputer(int computerIndex, QString name)
     Q_ASSERT(computerIndex < m_Computers.count());
 
     m_ComputerManager->renameHost(m_Computers[computerIndex], name);
+}
+
+QVariantMap ComputerModel::getHestiaDisplayStatus(int computerIndex)
+{
+    if (computerIndex < 0 || computerIndex >= m_Computers.count()) {
+        return {};
+    }
+    NvComputer* computer = m_Computers[computerIndex];
+    if (!computer->hestiaCapabilities.supportsProtocolV1) {
+        return {};
+    }
+    NvHTTP http(computer);
+    QJsonObject status;
+    return http.getHestiaDisplayStatus(&status) ? status.toVariantMap() : QVariantMap{};
+}
+
+bool ComputerModel::recoverHestiaDisplay(int computerIndex)
+{
+    if (computerIndex < 0 || computerIndex >= m_Computers.count()) {
+        return false;
+    }
+    NvComputer* computer = m_Computers[computerIndex];
+    if (!computer->hestiaCapabilities.supportsProtocolV1 || !computer->hestiaCapabilities.features.displayRecovery) {
+        return false;
+    }
+    NvHTTP http(computer);
+    QJsonObject status;
+    return http.recoverHestiaDisplay(false, &status);
+}
+
+QVariantMap ComputerModel::getHestiaClientPermissions(int computerIndex)
+{
+    if (computerIndex < 0 || computerIndex >= m_Computers.count()) {
+        return {};
+    }
+    NvComputer* computer = m_Computers[computerIndex];
+    if (!computer->hestiaCapabilities.supportsProtocolV1 || !computer->hestiaCapabilities.features.permissionSystem) {
+        return {};
+    }
+    NvHTTP http(computer);
+    QJsonObject permissions;
+    return http.getHestiaClientPermissions(&permissions) ? permissions.toVariantMap() : QVariantMap{};
+}
+
+QVariantMap ComputerModel::getHestiaDiagnostics(int computerIndex)
+{
+    if (computerIndex < 0 || computerIndex >= m_Computers.count()) {
+        return {};
+    }
+    NvComputer* computer = m_Computers[computerIndex];
+    if (!computer->hestiaCapabilities.supportsProtocolV1) {
+        return {};
+    }
+    NvHTTP http(computer);
+    QJsonObject diagnostics;
+    return http.getHestiaDiagnostics(&diagnostics) ? diagnostics.toVariantMap() : QVariantMap{};
+}
+
+bool ComputerModel::pasteHestiaClipboard(int computerIndex)
+{
+    if (computerIndex < 0 || computerIndex >= m_Computers.count()) {
+        return false;
+    }
+    NvComputer* computer = m_Computers[computerIndex];
+    if (!computer->hestiaCapabilities.supportsProtocolV1 || !computer->hestiaCapabilities.features.clipboardSync) {
+        return false;
+    }
+    NvHTTP http(computer);
+    QString text;
+    if (!http.getHestiaClipboard(&text)) {
+        return false;
+    }
+    QGuiApplication::clipboard()->setText(text);
+    return true;
+}
+
+bool ComputerModel::sendHestiaClipboard(int computerIndex)
+{
+    if (computerIndex < 0 || computerIndex >= m_Computers.count()) {
+        return false;
+    }
+    NvComputer* computer = m_Computers[computerIndex];
+    if (!computer->hestiaCapabilities.supportsProtocolV1 || !computer->hestiaCapabilities.features.clipboardSync) {
+        return false;
+    }
+    NvHTTP http(computer);
+    return http.setHestiaClipboard(QGuiApplication::clipboard()->text());
+}
+
+QVariantList ComputerModel::getHestiaServerCommands(int computerIndex)
+{
+    if (computerIndex < 0 || computerIndex >= m_Computers.count()) {
+        return {};
+    }
+    NvComputer* computer = m_Computers[computerIndex];
+    if (!computer->hestiaCapabilities.supportsProtocolV1 || !computer->hestiaCapabilities.features.serverCommands) {
+        return {};
+    }
+    NvHTTP http(computer);
+    QJsonArray commands;
+    return http.getHestiaServerCommands(&commands) ? commands.toVariantList() : QVariantList{};
+}
+
+bool ComputerModel::runHestiaServerCommand(int computerIndex, int commandId)
+{
+    if (computerIndex < 0 || computerIndex >= m_Computers.count()) {
+        return false;
+    }
+    NvComputer* computer = m_Computers[computerIndex];
+    if (!computer->hestiaCapabilities.supportsProtocolV1 || !computer->hestiaCapabilities.features.serverCommands) {
+        return false;
+    }
+    NvHTTP http(computer);
+    return http.runHestiaServerCommand(commandId);
 }
 
 QString ComputerModel::generatePinString()

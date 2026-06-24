@@ -192,6 +192,91 @@ CenteredGridView {
                         testConnectionDialog.open()
                     }
                 }
+                NavigableMenuItem {
+                    text: qsTr("Hermes Display Status")
+                    visible: model.online && model.paired && model.hestiaEnhanced
+                    onTriggered: {
+                        var status = computerModel.getHestiaDisplayStatus(index)
+                        hestiaStatusDialog.text = status.ok ? qsTr("Virtual display: %1\nBackend: %2\nResolution: %3×%4 @ %5 FPS\nKScreen: %6")
+                            .arg(status.virtual_display.enabled ? qsTr("Active") : qsTr("Inactive"))
+                            .arg(status.virtual_display.backend).arg(status.virtual_display.width).arg(status.virtual_display.height)
+                            .arg(status.virtual_display.fps).arg(status.desktop.kscreen_available ? qsTr("Available") : qsTr("Unavailable"))
+                            : qsTr("Hermes display status is unavailable for this host.")
+                        hestiaStatusDialog.open()
+                    }
+                }
+                NavigableMenuItem {
+                    text: qsTr("Recover Physical Monitor")
+                    visible: model.online && model.paired && model.hestiaDisplayRecovery
+                    onTriggered: { recoverDisplayDialog.pcIndex = index; recoverDisplayDialog.open() }
+                }
+                NavigableMenuItem {
+                    text: qsTr("Hermes Permissions")
+                    visible: model.online && model.paired && model.hestiaPermissionSystem
+                    onTriggered: {
+                        var permissions = computerModel.getHestiaClientPermissions(index)
+                        if (!permissions.ok) {
+                            hestiaStatusDialog.text = qsTr("Hermes permissions are unavailable for this host.")
+                        } else {
+                            var p = permissions.permissions
+                            hestiaStatusDialog.text = qsTr("Client: %1\n\nStream viewing: %2\nApp listing: %3\nApp launching: %4\nKeyboard input: %5\nMouse input: %6\nGamepad input: %7\nVirtual display: %8\nServer commands: %9\nClipboard sync: %10\nDisplay recovery: %11")
+                                    .arg(permissions.client_id)
+                                    .arg(p.view_streams ? qsTr("Allowed") : qsTr("Not allowed"))
+                                    .arg(p.list_apps ? qsTr("Allowed") : qsTr("Not allowed"))
+                                    .arg(p.launch_apps ? qsTr("Allowed") : qsTr("Not allowed"))
+                                    .arg(p.keyboard_input ? qsTr("Allowed") : qsTr("Not allowed"))
+                                    .arg(p.mouse_input ? qsTr("Allowed") : qsTr("Not allowed"))
+                                    .arg(p.gamepad_input ? qsTr("Allowed") : qsTr("Not allowed"))
+                                    .arg(p.virtual_display ? qsTr("Allowed") : qsTr("Not allowed"))
+                                    .arg(p.server_commands ? qsTr("Allowed") : qsTr("Not allowed"))
+                                    .arg(p.clipboard_sync ? qsTr("Allowed") : qsTr("Not allowed"))
+                                    .arg(p.display_recovery ? qsTr("Allowed") : qsTr("Not allowed"))
+                        }
+                        hestiaStatusDialog.open()
+                    }
+                }
+                NavigableMenuItem {
+                    text: qsTr("Hermes Diagnostics")
+                    visible: model.online && model.paired && model.hestiaEnhanced
+                    onTriggered: {
+                        var diagnostics = computerModel.getHestiaDiagnostics(index)
+                        if (!diagnostics.ok || !diagnostics.dependencies || !diagnostics.dependencies.clipboard) {
+                            hestiaStatusDialog.text = qsTr("Hermes diagnostics are unavailable for this host.")
+                        } else {
+                            var clipboard = diagnostics.dependencies.clipboard
+                            hestiaStatusDialog.text = qsTr("Clipboard support: %1\nDiagnostic: %2\n\n%3")
+                                    .arg(clipboard.available ? qsTr("Ready") : qsTr("Unavailable"))
+                                    .arg(clipboard.diagnostic)
+                                    .arg(clipboard.available ? qsTr("No action is required.") : clipboard.manualInstall)
+                        }
+                        hestiaStatusDialog.open()
+                    }
+                }
+                NavigableMenuItem {
+                    text: qsTr("Paste Host Clipboard")
+                    visible: model.online && model.paired && model.hestiaClipboardSync && StreamingPreferences.hestiaClipboardSync
+                    onTriggered: { pasteHostClipboardDialog.pcIndex = index; pasteHostClipboardDialog.open() }
+                }
+                NavigableMenuItem {
+                    text: qsTr("Send Local Clipboard")
+                    visible: model.online && model.paired && model.hestiaClipboardSync && StreamingPreferences.hestiaClipboardSync
+                    onTriggered: { sendLocalClipboardDialog.pcIndex = index; sendLocalClipboardDialog.open() }
+                }
+                NavigableMenuItem {
+                    text: qsTr("Server Commands")
+                    visible: model.online && model.paired && model.hestiaServerCommands
+                    onTriggered: {
+                        var commands = computerModel.getHestiaServerCommands(index)
+                        if (commands.length === 0) {
+                            hestiaStatusDialog.text = qsTr("No server commands are available for this host or this client lacks permission.")
+                            hestiaStatusDialog.open()
+                            return
+                        }
+                        serverCommandsDialog.pcIndex = index
+                        serverCommandsDialog.commands = commands
+                        serverCommandsDialog.open()
+                    }
+                }
 
                 NavigableMenuItem {
                     text: qsTr("Rename PC")
@@ -312,6 +397,74 @@ CenteredGridView {
 
         onAccepted: {
             computerModel.deleteComputer(pcIndex)
+        }
+    }
+
+    NavigableMessageDialog { id: hestiaStatusDialog; standardButtons: Dialog.Ok }
+    NavigableMessageDialog {
+        id: pasteHostClipboardDialog
+        property int pcIndex: -1
+        text: qsTr("Replace the local clipboard with text from this host?")
+        standardButtons: Dialog.Yes | Dialog.No
+        onAccepted: {
+            hestiaStatusDialog.text = computerModel.pasteHestiaClipboard(pcIndex) ?
+                        qsTr("Host clipboard copied locally.") : qsTr("The host clipboard is unavailable or permission was denied.")
+            hestiaStatusDialog.open()
+        }
+    }
+    NavigableMessageDialog {
+        id: sendLocalClipboardDialog
+        property int pcIndex: -1
+        text: qsTr("Send the local clipboard text to this host?")
+        standardButtons: Dialog.Yes | Dialog.No
+        onAccepted: {
+            hestiaStatusDialog.text = computerModel.sendHestiaClipboard(pcIndex) ?
+                        qsTr("Local clipboard sent to the host.") : qsTr("The local clipboard could not be sent; check host availability and permission.")
+            hestiaStatusDialog.open()
+        }
+    }
+    NavigableMessageDialog {
+        id: recoverDisplayDialog
+        property int pcIndex: -1
+        text: qsTr("Recover the physical monitor? This stops any active stream.")
+        standardButtons: Dialog.Yes | Dialog.No
+        onAccepted: { hestiaStatusDialog.text = computerModel.recoverHestiaDisplay(pcIndex) ? qsTr("Physical display restored.") : qsTr("Physical display recovery is unavailable."); hestiaStatusDialog.open() }
+    }
+    NavigableDialog {
+        id: serverCommandsDialog
+        property int pcIndex: -1
+        property var commands: []
+        title: qsTr("Server Commands")
+        standardButtons: Dialog.Close
+
+        Column {
+            spacing: 6
+            Repeater {
+                model: serverCommandsDialog.commands
+                delegate: Button {
+                    width: 320
+                    text: modelData.name
+                    onClicked: {
+                        serverCommandConfirmation.pcIndex = serverCommandsDialog.pcIndex
+                        serverCommandConfirmation.commandId = modelData.id
+                        serverCommandConfirmation.commandName = modelData.name
+                        serverCommandConfirmation.open()
+                    }
+                }
+            }
+        }
+    }
+    NavigableMessageDialog {
+        id: serverCommandConfirmation
+        property int pcIndex: -1
+        property int commandId: -1
+        property string commandName: ""
+        text: qsTr("Run server command '%1'?").arg(commandName)
+        standardButtons: Dialog.Yes | Dialog.No
+        onAccepted: {
+            hestiaStatusDialog.text = computerModel.runHestiaServerCommand(pcIndex, commandId) ?
+                        qsTr("Server command started.") : qsTr("The server command could not be started.")
+            hestiaStatusDialog.open()
         }
     }
 

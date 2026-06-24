@@ -2,6 +2,7 @@
 #include "settings/streamingpreferences.h"
 #include "streaming/streamutils.h"
 #include "backend/richpresencemanager.h"
+#include "backend/hestiacapabilities.h"
 
 #include <Limelight.h>
 #include "SDL_compat.h"
@@ -39,7 +40,9 @@
 #include <QImage>
 #include <QGuiApplication>
 #include <QCursor>
+#include <QJsonObject>
 #include <QScreen>
+#include <QtMath>
 
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
 #include <QQuickOpenGLUtils>
@@ -561,6 +564,7 @@ Session::Session(NvComputer* computer, NvApp& app, StreamingPreferences *prefere
       m_InputHandler(nullptr),
       m_MouseEmulationRefCount(0),
       m_FlushingWindowEventsRef(0),
+      m_ShouldPrepareHestiaSession(false),
       m_ShouldExit(false),
       m_AsyncConnectionSuccess(false),
       m_PortTestResults(0),
@@ -577,6 +581,81 @@ Session::~Session()
     // Use Session::exec() or DeferredSessionCleanupTask instead.
 
     SDL_DestroyMutex(m_DecoderLock);
+}
+
+QJsonObject Session::buildHestiaSessionPrepareRequest() const
+{
+    int displayWidth = m_StreamConfig.width;
+    int displayHeight = m_StreamConfig.height;
+    int refreshRate = m_StreamConfig.fps;
+    if (m_QtWindow != nullptr && m_QtWindow->screen() != nullptr) {
+        const QScreen* screen = m_QtWindow->screen();
+        displayWidth = screen->size().width();
+        displayHeight = screen->size().height();
+        const int screenRefreshRate = qRound(screen->refreshRate());
+        if (screenRefreshRate > 0) {
+            refreshRate = screenRefreshRate;
+        }
+    }
+
+    const HestiaFeatures& features = m_Computer->hestiaCapabilities.features;
+    const bool hdrEnabled = m_Preferences->enableHdr && features.hdrModeControl;
+    const QString launchMode = features.gamescopeSession &&
+                                       m_Preferences->hestiaLaunchMode == StreamingPreferences::HLM_GAMESCOPE ?
+                                   "gamescope" : "normal";
+    QString codec = "h264";
+    if (m_StreamConfig.supportedVideoFormats & VIDEO_FORMAT_MASK_AV1) {
+        codec = "av1";
+    }
+    else if (m_StreamConfig.supportedVideoFormats & VIDEO_FORMAT_MASK_H265) {
+        codec = "hevc";
+    }
+
+#if defined(Q_OS_LINUX)
+    const QString platform = "linux";
+#elif defined(Q_OS_WIN32)
+    const QString platform = "windows";
+#elif defined(Q_OS_DARWIN)
+    const QString platform = "macos";
+#else
+    const QString platform = "unknown";
+#endif
+
+    const QJsonObject client = {
+        {"name", "Hestia"},
+        {"version", VERSION_STR},
+        {"platform", platform},
+        {"display_width", displayWidth},
+        {"display_height", displayHeight},
+        {"refresh_rate", refreshRate},
+        {"hdr", hdrEnabled},
+    };
+    const QJsonObject stream = {
+        {"requested_width", m_StreamConfig.width},
+        {"requested_height", m_StreamConfig.height},
+        {"requested_fps", m_StreamConfig.fps},
+        {"codec", codec},
+        {"bitrate_kbps", m_StreamConfig.bitrate},
+        {"hdr_mode", hdrEnabled ? "hdr" : "sdr"},
+        {"scale_factor", features.scaleFactor ? m_Preferences->hestiaScaleFactor : 100},
+    };
+    const QJsonObject virtualDisplay = {
+        {"enabled", features.virtualDisplay && m_Preferences->hestiaVirtualDisplay},
+        {"backend", "auto"},
+        {"desktop_integration", "auto"},
+        {"recover_physical_monitor", features.displayRecovery},
+    };
+    const QJsonObject app = {
+        {"id", QString::number(m_App.id)},
+        {"launch_mode", launchMode},
+    };
+
+    return {
+        {"client", client},
+        {"stream", stream},
+        {"virtual_display", virtualDisplay},
+        {"app", app},
+    };
 }
 
 bool Session::initialize(QQuickWindow* qtWindow)
@@ -940,6 +1019,11 @@ bool Session::initialize(QQuickWindow* qtWindow)
         return false;
     }
 
+    if (m_Computer->hestiaCapabilities.supportsProtocolV1) {
+        m_HestiaSessionPrepareRequest = buildHestiaSessionPrepareRequest();
+        m_ShouldPrepareHestiaSession = true;
+    }
+
     return true;
 }
 
@@ -1271,6 +1355,14 @@ private:
         // LiStartConnection() and LiStopConnection().
         SDL_assert(m_Session->m_VideoDecoder == nullptr);
 
+        // Hermes can release its session-specific display state before the
+        // standard GameStream disconnect. Older or standard hosts simply
+        // reject this best-effort extension request.
+        if (m_Session->m_Computer->hestiaCapabilities.supportsProtocolV1) {
+            NvHTTP http(m_Session->m_Computer);
+            http.stopHestiaSession();
+        }
+
         // Finish cleanup of the connection state
         LiStopConnection();
 
@@ -1594,6 +1686,9 @@ bool Session::startConnectionAsync()
 
     try {
         NvHTTP http(m_Computer);
+        if (m_ShouldPrepareHestiaSession) {
+            http.prepareHestiaSession(m_HestiaSessionPrepareRequest);
+        }
         http.startApp(m_Computer->currentGameId != 0 ? "resume" : "launch",
                       m_Computer->isNvidiaServerSoftware,
                       m_App.id, &m_StreamConfig,

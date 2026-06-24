@@ -167,6 +167,7 @@ macx {
 
 SOURCES += \
     backend/nvaddress.cpp \
+    backend/hestiacapabilities.cpp \
     backend/nvapp.cpp \
     cli/pair.cpp \
     main.cpp \
@@ -209,6 +210,7 @@ SOURCES += \
 HEADERS += \
     SDL_compat.h \
     backend/nvaddress.h \
+    backend/hestiacapabilities.h \
     backend/nvapp.h \
     cli/pair.h \
     settings/compatfetcher.h \

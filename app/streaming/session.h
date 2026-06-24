@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QSemaphore>
+#include <QJsonObject>
 #include <QQuickWindow>
 
 #include <Limelight.h>
@@ -148,6 +149,8 @@ private:
 
     bool startConnectionAsync();
 
+    QJsonObject buildHestiaSessionPrepareRequest() const;
+
     bool validateLaunch(SDL_Window* testWindow);
 
     void emitLaunchWarning(QString text);
@@ -262,6 +265,8 @@ private:
     int m_MouseEmulationRefCount;
     int m_FlushingWindowEventsRef;
     QStringList m_LaunchWarnings;
+    QJsonObject m_HestiaSessionPrepareRequest;
+    bool m_ShouldPrepareHestiaSession;
     bool m_ShouldExit;
 
     bool m_AsyncConnectionSuccess;

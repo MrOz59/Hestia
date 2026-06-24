@@ -72,6 +72,14 @@ private:
         return true;
     }
 
+    void probeHestiaCapabilities(QNetworkAccessManager* nam)
+    {
+        NvHTTP http(m_Computer, nam);
+        HestiaCapabilities capabilities;
+        http.probeHestiaCapabilities(&capabilities);
+        m_Computer->setHestiaCapabilities(capabilities);
+    }
+
     void run() override
     {
         // Reduce the power and performance impact of our
@@ -117,6 +125,11 @@ private:
             if (!online && m_Computer->state != NvComputer::CS_OFFLINE) {
                 qInfo() << m_Computer->name << "is now offline";
                 m_Computer->state = NvComputer::CS_OFFLINE;
+                stateChanged = true;
+            }
+
+            if (online && !wasOnline) {
+                probeHestiaCapabilities(&nam);
                 stateChanged = true;
             }
 
@@ -618,6 +631,13 @@ private:
                // Persist the newly pinned server certificate for this host
                m_ComputerManager->saveHost(m_Computer);
 
+               {
+                   NvHTTP http(m_Computer);
+                   HestiaCapabilities capabilities;
+                   http.probeHestiaCapabilities(&capabilities);
+                   m_Computer->setHestiaCapabilities(capabilities);
+               }
+
                emit pairingCompleted(m_Computer, nullptr);
                break;
            }
@@ -909,6 +929,12 @@ private:
             newComputer->manualAddress = m_Address;
         }
 
+        {
+            HestiaCapabilities capabilities;
+            http.probeHestiaCapabilities(&capabilities);
+            newComputer->setHestiaCapabilities(capabilities);
+        }
+
         QHostAddress hostAddress(m_Address.address());
         bool addressIsSiteLocalV4 =
                 hostAddress.isInSubnet(QHostAddress("10.0.0.0"), 8) ||
@@ -937,6 +963,7 @@ private:
             if (existingComputer != nullptr) {
                 // Fold it into the existing PC
                 bool changed = existingComputer->update(*newComputer);
+                existingComputer->setHestiaCapabilities(newComputer->hestiaCapabilities);
                 delete newComputer;
 
                 // Drop the lock before notifying

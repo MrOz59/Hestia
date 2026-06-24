@@ -1654,6 +1654,104 @@ Flickable {
                 }
 
                 CheckBox {
+                    id: hestiaVirtualDisplay
+                    width: parent.width
+                    text: qsTr("Use a virtual display on Hermes hosts")
+                    font.pointSize: 12
+
+                    checked: StreamingPreferences.hestiaVirtualDisplay
+                    onCheckedChanged: {
+                        StreamingPreferences.hestiaVirtualDisplay = checked
+                    }
+
+                    ToolTip.delay: 1000
+                    ToolTip.timeout: 5000
+                    ToolTip.visible: hovered
+                    ToolTip.text: qsTr("Requests a temporary virtual display only from Hermes hosts that advertise Hestia virtual-display support. Other Apollo and Sunshine hosts are unchanged.")
+                }
+
+                CheckBox {
+                    id: hestiaClipboardSync
+                    width: parent.width
+                    text: qsTr("Enable text clipboard sync with Hermes hosts")
+                    font.pointSize: 12
+                    checked: StreamingPreferences.hestiaClipboardSync
+                    onCheckedChanged: StreamingPreferences.hestiaClipboardSync = checked
+                    ToolTip.delay: 1000
+                    ToolTip.visible: hovered
+                    ToolTip.text: qsTr("Clipboard access is manual, text-only, and requires paired-host permission.")
+                }
+
+                Label {
+                    width: parent.width
+                    text: qsTr("Hermes virtual display scale")
+                    font.pointSize: 12
+                    enabled: hestiaVirtualDisplay.checked
+                }
+
+                AutoResizingComboBox {
+                    id: hestiaScaleFactor
+                    enabled: hestiaVirtualDisplay.checked
+                    textRole: "text"
+                    model: ListModel {
+                        id: hestiaScaleFactorListModel
+                        ListElement { text: qsTr("100% (Native)"); val: 100 }
+                        ListElement { text: qsTr("125%"); val: 125 }
+                        ListElement { text: qsTr("150%"); val: 150 }
+                        ListElement { text: qsTr("200%"); val: 200 }
+                    }
+
+                    Component.onCompleted: {
+                        currentIndex = 0
+                        for (var i = 0; i < hestiaScaleFactorListModel.count; i++) {
+                            if (StreamingPreferences.hestiaScaleFactor === hestiaScaleFactorListModel.get(i).val) {
+                                currentIndex = i
+                                break
+                            }
+                        }
+                    }
+
+                    onActivated: {
+                        StreamingPreferences.hestiaScaleFactor = hestiaScaleFactorListModel.get(currentIndex).val
+                    }
+                }
+
+                Label {
+                    width: parent.width
+                    text: qsTr("Hermes launch mode")
+                    font.pointSize: 12
+                }
+
+                AutoResizingComboBox {
+                    id: hestiaLaunchMode
+                    textRole: "text"
+                    model: ListModel {
+                        id: hestiaLaunchModeListModel
+                        ListElement { text: qsTr("Normal"); val: StreamingPreferences.HLM_NORMAL }
+                        ListElement { text: qsTr("Gamescope"); val: StreamingPreferences.HLM_GAMESCOPE }
+                    }
+
+                    Component.onCompleted: {
+                        currentIndex = 0
+                        for (var i = 0; i < hestiaLaunchModeListModel.count; i++) {
+                            if (StreamingPreferences.hestiaLaunchMode === hestiaLaunchModeListModel.get(i).val) {
+                                currentIndex = i
+                                break
+                            }
+                        }
+                    }
+
+                    onActivated: {
+                        StreamingPreferences.hestiaLaunchMode = hestiaLaunchModeListModel.get(currentIndex).val
+                    }
+
+                    ToolTip.delay: 1000
+                    ToolTip.timeout: 5000
+                    ToolTip.visible: hovered
+                    ToolTip.text: qsTr("Requests that a Hermes host run the selected app inside Gamescope. Hosts without Hestia Gamescope support use normal launch mode.")
+                }
+
+                CheckBox {
                     id: enableYUV444
                     width: parent.width
                     text: qsTr("Enable YUV 4:4:4 (Experimental)")

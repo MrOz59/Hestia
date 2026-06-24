@@ -44,6 +44,13 @@ public:
     };
     Q_ENUM(VideoDecoderSelection)
 
+    enum HestiaLaunchMode
+    {
+        HLM_NORMAL,
+        HLM_GAMESCOPE
+    };
+    Q_ENUM(HestiaLaunchMode)
+
     enum WindowMode
     {
         WM_FULLSCREEN,
@@ -132,6 +139,10 @@ public:
     Q_PROPERTY(AudioConfig audioConfig MEMBER audioConfig NOTIFY audioConfigChanged)
     Q_PROPERTY(VideoCodecConfig videoCodecConfig MEMBER videoCodecConfig NOTIFY videoCodecConfigChanged)
     Q_PROPERTY(bool enableHdr MEMBER enableHdr NOTIFY enableHdrChanged)
+    Q_PROPERTY(bool hestiaVirtualDisplay MEMBER hestiaVirtualDisplay NOTIFY hestiaPreferencesChanged)
+    Q_PROPERTY(bool hestiaClipboardSync MEMBER hestiaClipboardSync NOTIFY hestiaPreferencesChanged)
+    Q_PROPERTY(int hestiaScaleFactor MEMBER hestiaScaleFactor NOTIFY hestiaPreferencesChanged)
+    Q_PROPERTY(HestiaLaunchMode hestiaLaunchMode MEMBER hestiaLaunchMode NOTIFY hestiaPreferencesChanged)
     Q_PROPERTY(bool enableYUV444 MEMBER enableYUV444 NOTIFY enableYUV444Changed)
     Q_PROPERTY(VideoDecoderSelection videoDecoderSelection MEMBER videoDecoderSelection NOTIFY videoDecoderSelectionChanged)
     Q_PROPERTY(WindowMode windowMode MEMBER windowMode NOTIFY windowModeChanged)
@@ -180,6 +191,10 @@ public:
     AudioConfig audioConfig;
     VideoCodecConfig videoCodecConfig;
     bool enableHdr;
+    bool hestiaVirtualDisplay;
+    bool hestiaClipboardSync;
+    int hestiaScaleFactor;
+    HestiaLaunchMode hestiaLaunchMode;
     bool enableYUV444;
     VideoDecoderSelection videoDecoderSelection;
     WindowMode windowMode;
@@ -205,6 +220,7 @@ signals:
     void audioConfigChanged();
     void videoCodecConfigChanged();
     void enableHdrChanged();
+    void hestiaPreferencesChanged();
     void enableYUV444Changed();
     void videoDecoderSelectionChanged();
     void uiDisplayModeChanged();
@@ -232,4 +248,3 @@ private:
 
     QQmlEngine* m_QmlEngine;
 };
-

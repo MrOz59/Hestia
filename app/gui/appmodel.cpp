@@ -47,6 +47,13 @@ Session* AppModel::createSessionForApp(int appIndex)
     return new Session(m_Computer, app);
 }
 
+bool AppModel::supportsHestiaGamescope() const
+{
+    QReadLocker lock(&m_Computer->lock);
+    return m_Computer->hestiaCapabilities.supportsProtocolV1 &&
+           m_Computer->hestiaCapabilities.features.gamescopeSession;
+}
+
 int AppModel::getDirectLaunchAppIndex()
 {
     for (int i = 0; i < m_VisibleApps.count(); i++) {

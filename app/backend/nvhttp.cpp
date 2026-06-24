@@ -2,6 +2,10 @@
 #include <Limelight.h>
 
 #include <QDebug>
+#include <QCoreApplication>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QUuid>
 #include <QtNetwork/QNetworkReply>
 #include <QEventLoop>
@@ -17,6 +21,8 @@
 #define LAUNCH_TIMEOUT_MS 120000
 #define RESUME_TIMEOUT_MS 30000
 #define QUIT_TIMEOUT_MS 30000
+#define HESTIA_CAPABILITIES_TIMEOUT_MS 2000
+#define HESTIA_SESSION_PREPARE_TIMEOUT_MS 5000
 
 #if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
 #define XML_NAME_EQUALS(x, y) ((x) == (y))
@@ -194,6 +200,501 @@ NvHTTP::getServerInfo(NvLogLevel logLevel, bool fastFail)
     }
 
     return serverInfo;
+}
+
+bool NvHTTP::probeHestiaCapabilities(HestiaCapabilities* capabilities)
+{
+    Q_ASSERT(capabilities != nullptr);
+
+    if (m_ServerCert.isNull()) {
+        qDebug() << "[Hestia] Host does not support Hestia API; using standard mode (host is not paired)";
+        return false;
+    }
+
+    // Hermes serves its optional API on the documented Apollo/Sunshine web port.
+    QUrl url;
+    url.setScheme("https");
+    url.setHost(m_Address.address());
+    url.setPort(m_Address.port() + 1);
+    url.setPath("/api/hestia/v1/capabilities");
+
+    qDebug().noquote() << "[Hestia] Probing enhanced capabilities at" << url.toString();
+
+    QNetworkRequest request(url);
+    request.setRawHeader("Accept", "application/json");
+    request.setSslConfiguration(IdentityManager::get()->getSslConfig());
+
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    request.setAttribute(QNetworkRequest::Http2AllowedAttribute, false);
+#endif
+
+    auto sslErrorsConnection = connect(m_Nam, &QNetworkAccessManager::sslErrors, this, &NvHTTP::handleSslErrors);
+    QNetworkReply* reply = m_Nam->get(request);
+    QEventLoop loop;
+    QTimer timeoutTimer;
+    timeoutTimer.setSingleShot(true);
+    connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+    connect(&timeoutTimer, &QTimer::timeout, &loop, &QEventLoop::quit);
+    connect(QCoreApplication::instance(), &QCoreApplication::aboutToQuit, &loop, &QEventLoop::quit);
+    timeoutTimer.start(HESTIA_CAPABILITIES_TIMEOUT_MS);
+    loop.exec(QEventLoop::ExcludeUserInputEvents);
+    disconnect(sslErrorsConnection);
+
+    if (!reply->isFinished()) {
+        reply->abort();
+        qDebug() << "[Hestia] Host does not support Hestia API; using standard mode (capabilities request timed out)";
+        delete reply;
+        return false;
+    }
+
+    const int statusCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+    if (reply->error() != QNetworkReply::NoError || statusCode < 200 || statusCode >= 300) {
+        qDebug() << "[Hestia] Host does not support Hestia API; using standard mode"
+                 << "(status" << statusCode << ", network error" << reply->error() << ")";
+        delete reply;
+        return false;
+    }
+
+    QJsonParseError parseError;
+    const QJsonDocument document = QJsonDocument::fromJson(reply->readAll(), &parseError);
+    delete reply;
+    if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
+        qDebug() << "[Hestia] Host does not support Hestia API; using standard mode (malformed capabilities response)";
+        return false;
+    }
+
+    HestiaCapabilities parsedCapabilities;
+    QString validationError;
+    if (!HestiaCapabilities::fromJson(document.object(), &parsedCapabilities, &validationError)) {
+        qDebug().noquote() << "[Hestia] Host does not support Hestia API; using standard mode (" + validationError + ")";
+        return false;
+    }
+
+    *capabilities = parsedCapabilities;
+    qDebug() << "[Hestia] Host supports Hestia protocol v1";
+    return true;
+}
+
+bool NvHTTP::prepareHestiaSession(const QJsonObject& sessionRequest)
+{
+    if (m_ServerCert.isNull()) {
+        qDebug() << "[Hestia] Skipping session prepare; host is not paired";
+        return false;
+    }
+
+    QUrl url;
+    url.setScheme("https");
+    url.setHost(m_Address.address());
+    url.setPort(m_Address.port() + 1);
+    url.setPath("/api/hestia/v1/session/prepare");
+
+    const QJsonObject stream = sessionRequest.value("stream").toObject();
+    const QJsonObject virtualDisplay = sessionRequest.value("virtual_display").toObject();
+    qDebug() << "[Hestia] Preparing session with virtual_display="
+             << virtualDisplay.value("enabled").toBool()
+             << "width=" << stream.value("requested_width").toInt()
+             << "height=" << stream.value("requested_height").toInt()
+             << "fps=" << stream.value("requested_fps").toInt();
+
+    QNetworkRequest request(url);
+    request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+    request.setRawHeader("Accept", "application/json");
+    request.setSslConfiguration(IdentityManager::get()->getSslConfig());
+
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    request.setAttribute(QNetworkRequest::Http2AllowedAttribute, false);
+#endif
+
+    auto sslErrorsConnection = connect(m_Nam, &QNetworkAccessManager::sslErrors, this, &NvHTTP::handleSslErrors);
+    QNetworkReply* reply = m_Nam->post(request, QJsonDocument(sessionRequest).toJson(QJsonDocument::Compact));
+    QEventLoop loop;
+    QTimer timeoutTimer;
+    timeoutTimer.setSingleShot(true);
+    connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+    connect(&timeoutTimer, &QTimer::timeout, &loop, &QEventLoop::quit);
+    connect(QCoreApplication::instance(), &QCoreApplication::aboutToQuit, &loop, &QEventLoop::quit);
+    timeoutTimer.start(HESTIA_SESSION_PREPARE_TIMEOUT_MS);
+    loop.exec(QEventLoop::ExcludeUserInputEvents);
+    disconnect(sslErrorsConnection);
+
+    if (!reply->isFinished()) {
+        reply->abort();
+        qDebug() << "[Hestia] Session prepare unavailable; using standard Moonlight mode (request timed out)";
+        delete reply;
+        return false;
+    }
+
+    const int statusCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+    if (reply->error() != QNetworkReply::NoError || statusCode < 200 || statusCode >= 300) {
+        qDebug() << "[Hestia] Session prepare unavailable; using standard Moonlight mode"
+                 << "(status" << statusCode << ", network error" << reply->error() << ")";
+        delete reply;
+        return false;
+    }
+
+    QJsonParseError parseError;
+    const QJsonDocument document = QJsonDocument::fromJson(reply->readAll(), &parseError);
+    delete reply;
+    if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
+        qDebug() << "[Hestia] Session prepare unavailable; using standard Moonlight mode (malformed response)";
+        return false;
+    }
+
+    const QJsonObject response = document.object();
+    const QJsonObject responseVirtualDisplay = response.value("virtual_display").toObject();
+    const QJsonArray warnings = response.value("warnings").toArray();
+    if (!response.value("ok").isBool() || !response.value("ok").toBool() ||
+            !response.value("session_id").isString() || response.value("session_id").toString().isEmpty() ||
+            responseVirtualDisplay.isEmpty() ||
+            !responseVirtualDisplay.value("created").isBool() ||
+            !responseVirtualDisplay.value("name").isString() ||
+            !responseVirtualDisplay.value("backend").isString() ||
+            !responseVirtualDisplay.value("width").isDouble() ||
+            !responseVirtualDisplay.value("height").isDouble() ||
+            !responseVirtualDisplay.value("fps").isDouble() ||
+            !responseVirtualDisplay.value("hdr").isBool() ||
+            !responseVirtualDisplay.value("kscreen_enabled").isBool() ||
+            !response.value("warnings").isArray()) {
+        qDebug() << "[Hestia] Session prepare unavailable; using standard Moonlight mode (invalid response)";
+        return false;
+    }
+
+    for (const QJsonValue& warning : warnings) {
+        if (!warning.isString()) {
+            qDebug() << "[Hestia] Session prepare unavailable; using standard Moonlight mode (invalid warnings)";
+            return false;
+        }
+    }
+
+    qDebug() << "[Hestia] Session prepared:" << response.value("session_id").toString();
+    return true;
+}
+
+bool NvHTTP::stopHestiaSession()
+{
+    if (m_ServerCert.isNull()) {
+        return false;
+    }
+
+    QUrl url;
+    url.setScheme("https");
+    url.setHost(m_Address.address());
+    url.setPort(m_Address.port() + 1);
+    url.setPath("/api/hestia/v1/session/stop");
+    QNetworkRequest request(url);
+    request.setSslConfiguration(IdentityManager::get()->getSslConfig());
+    auto sslErrorsConnection = connect(m_Nam, &QNetworkAccessManager::sslErrors, this, &NvHTTP::handleSslErrors);
+    QNetworkReply* reply = m_Nam->post(request, QByteArray());
+    QEventLoop loop;
+    QTimer::singleShot(HESTIA_SESSION_PREPARE_TIMEOUT_MS, &loop, &QEventLoop::quit);
+    connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+    loop.exec(QEventLoop::ExcludeUserInputEvents);
+    disconnect(sslErrorsConnection);
+
+    const bool success = reply->isFinished() && reply->error() == QNetworkReply::NoError &&
+            reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() >= 200 &&
+            reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() < 300;
+    QJsonParseError error;
+    const QJsonDocument response = QJsonDocument::fromJson(reply->readAll(), &error);
+    delete reply;
+    return success && error.error == QJsonParseError::NoError && response.isObject() &&
+            response.object().value("ok").toBool();
+}
+
+bool NvHTTP::getHestiaDisplayStatus(QJsonObject* status)
+{
+    Q_ASSERT(status != nullptr);
+    if (m_ServerCert.isNull()) {
+        return false;
+    }
+
+    QUrl url;
+    url.setScheme("https");
+    url.setHost(m_Address.address());
+    url.setPort(m_Address.port() + 1);
+    url.setPath("/api/hestia/v1/display/status");
+
+    QNetworkRequest request(url);
+    request.setRawHeader("Accept", "application/json");
+    request.setSslConfiguration(IdentityManager::get()->getSslConfig());
+    auto sslErrorsConnection = connect(m_Nam, &QNetworkAccessManager::sslErrors, this, &NvHTTP::handleSslErrors);
+    QNetworkReply* reply = m_Nam->get(request);
+    QEventLoop loop;
+    QTimer::singleShot(HESTIA_SESSION_PREPARE_TIMEOUT_MS, &loop, &QEventLoop::quit);
+    connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+    loop.exec(QEventLoop::ExcludeUserInputEvents);
+    disconnect(sslErrorsConnection);
+
+    const bool success = reply->isFinished() && reply->error() == QNetworkReply::NoError &&
+            reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() >= 200 &&
+            reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() < 300;
+    QJsonParseError error;
+    const QJsonDocument response = QJsonDocument::fromJson(reply->readAll(), &error);
+    delete reply;
+    if (!success || error.error != QJsonParseError::NoError || !response.isObject() ||
+            !response.object().value("ok").toBool()) {
+        qDebug() << "[Hestia] Display status unavailable; keeping standard mode";
+        return false;
+    }
+
+    *status = response.object();
+    return true;
+}
+
+bool NvHTTP::recoverHestiaDisplay(bool force, QJsonObject* status)
+{
+    Q_ASSERT(status != nullptr);
+    if (m_ServerCert.isNull()) {
+        return false;
+    }
+
+    QUrl url;
+    url.setScheme("https");
+    url.setHost(m_Address.address());
+    url.setPort(m_Address.port() + 1);
+    url.setPath("/api/hestia/v1/display/recover");
+    QNetworkRequest request(url);
+    request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+    request.setSslConfiguration(IdentityManager::get()->getSslConfig());
+    auto sslErrorsConnection = connect(m_Nam, &QNetworkAccessManager::sslErrors, this, &NvHTTP::handleSslErrors);
+    QNetworkReply* reply = m_Nam->post(request, QJsonDocument(QJsonObject {{"force", force}}).toJson(QJsonDocument::Compact));
+    QEventLoop loop;
+    QTimer::singleShot(HESTIA_SESSION_PREPARE_TIMEOUT_MS, &loop, &QEventLoop::quit);
+    connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+    loop.exec(QEventLoop::ExcludeUserInputEvents);
+    disconnect(sslErrorsConnection);
+
+    const bool success = reply->isFinished() && reply->error() == QNetworkReply::NoError &&
+            reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() >= 200 &&
+            reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() < 300;
+    QJsonParseError error;
+    const QJsonDocument response = QJsonDocument::fromJson(reply->readAll(), &error);
+    delete reply;
+    if (!success || error.error != QJsonParseError::NoError || !response.isObject() ||
+            !response.object().value("ok").toBool()) {
+        qDebug() << "[Hestia] Display recovery unavailable";
+        return false;
+    }
+
+    *status = response.object();
+    return true;
+}
+
+bool NvHTTP::getHestiaServerCommands(QJsonArray* commands)
+{
+    Q_ASSERT(commands != nullptr);
+    if (m_ServerCert.isNull()) {
+        return false;
+    }
+
+    QUrl url;
+    url.setScheme("https");
+    url.setHost(m_Address.address());
+    url.setPort(m_Address.port() + 1);
+    url.setPath("/api/hestia/v1/commands");
+    QNetworkRequest request(url);
+    request.setSslConfiguration(IdentityManager::get()->getSslConfig());
+    auto sslErrorsConnection = connect(m_Nam, &QNetworkAccessManager::sslErrors, this, &NvHTTP::handleSslErrors);
+    QNetworkReply* reply = m_Nam->get(request);
+    QEventLoop loop;
+    QTimer::singleShot(HESTIA_SESSION_PREPARE_TIMEOUT_MS, &loop, &QEventLoop::quit);
+    connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+    loop.exec(QEventLoop::ExcludeUserInputEvents);
+    disconnect(sslErrorsConnection);
+
+    const bool success = reply->isFinished() && reply->error() == QNetworkReply::NoError &&
+            reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() >= 200 &&
+            reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() < 300;
+    QJsonParseError error;
+    const QJsonDocument response = QJsonDocument::fromJson(reply->readAll(), &error);
+    delete reply;
+    if (!success || error.error != QJsonParseError::NoError || !response.isObject() ||
+            !response.object().value("ok").toBool() || !response.object().value("commands").isArray()) {
+        qDebug() << "[Hestia] Server commands unavailable";
+        return false;
+    }
+
+    *commands = response.object().value("commands").toArray();
+    return true;
+}
+
+bool NvHTTP::getHestiaClientPermissions(QJsonObject* permissions)
+{
+    Q_ASSERT(permissions != nullptr);
+    if (m_ServerCert.isNull()) {
+        return false;
+    }
+
+    QUrl url;
+    url.setScheme("https");
+    url.setHost(m_Address.address());
+    url.setPort(m_Address.port() + 1);
+    url.setPath("/api/hestia/v1/client/permissions");
+    QNetworkRequest request(url);
+    request.setSslConfiguration(IdentityManager::get()->getSslConfig());
+    auto sslErrorsConnection = connect(m_Nam, &QNetworkAccessManager::sslErrors, this, &NvHTTP::handleSslErrors);
+    QNetworkReply* reply = m_Nam->get(request);
+    QEventLoop loop;
+    QTimer::singleShot(HESTIA_SESSION_PREPARE_TIMEOUT_MS, &loop, &QEventLoop::quit);
+    connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+    loop.exec(QEventLoop::ExcludeUserInputEvents);
+    disconnect(sslErrorsConnection);
+
+    const bool success = reply->isFinished() && reply->error() == QNetworkReply::NoError &&
+            reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() >= 200 &&
+            reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() < 300;
+    QJsonParseError error;
+    const QJsonDocument response = QJsonDocument::fromJson(reply->readAll(), &error);
+    delete reply;
+    if (!success || error.error != QJsonParseError::NoError || !response.isObject() ||
+            !response.object().value("ok").toBool() || !response.object().value("client_id").isString() ||
+            !response.object().value("permissions").isObject()) {
+        qDebug() << "[Hestia] Client permissions unavailable";
+        return false;
+    }
+
+    *permissions = response.object();
+    return true;
+}
+
+bool NvHTTP::getHestiaDiagnostics(QJsonObject* diagnostics)
+{
+    Q_ASSERT(diagnostics != nullptr);
+    if (m_ServerCert.isNull()) {
+        return false;
+    }
+
+    QUrl url;
+    url.setScheme("https");
+    url.setHost(m_Address.address());
+    url.setPort(m_Address.port() + 1);
+    url.setPath("/api/hestia/v1/diagnostics");
+    QNetworkRequest request(url);
+    request.setSslConfiguration(IdentityManager::get()->getSslConfig());
+    auto sslErrorsConnection = connect(m_Nam, &QNetworkAccessManager::sslErrors, this, &NvHTTP::handleSslErrors);
+    QNetworkReply* reply = m_Nam->get(request);
+    QEventLoop loop;
+    QTimer::singleShot(HESTIA_SESSION_PREPARE_TIMEOUT_MS, &loop, &QEventLoop::quit);
+    connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+    loop.exec(QEventLoop::ExcludeUserInputEvents);
+    disconnect(sslErrorsConnection);
+
+    const bool success = reply->isFinished() && reply->error() == QNetworkReply::NoError &&
+            reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() >= 200 &&
+            reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() < 300;
+    QJsonParseError error;
+    const QJsonDocument response = QJsonDocument::fromJson(reply->readAll(), &error);
+    delete reply;
+    if (!success || error.error != QJsonParseError::NoError || !response.isObject() ||
+            !response.object().value("ok").toBool() || !response.object().value("dependencies").isObject()) {
+        qDebug() << "[Hestia] Hermes diagnostics unavailable";
+        return false;
+    }
+
+    *diagnostics = response.object();
+    return true;
+}
+
+bool NvHTTP::getHestiaClipboard(QString* text)
+{
+    Q_ASSERT(text != nullptr);
+    if (m_ServerCert.isNull()) {
+        return false;
+    }
+
+    QUrl url;
+    url.setScheme("https");
+    url.setHost(m_Address.address());
+    url.setPort(m_Address.port() + 1);
+    url.setPath("/api/hestia/v1/clipboard");
+    QNetworkRequest request(url);
+    request.setSslConfiguration(IdentityManager::get()->getSslConfig());
+    auto sslErrorsConnection = connect(m_Nam, &QNetworkAccessManager::sslErrors, this, &NvHTTP::handleSslErrors);
+    QNetworkReply* reply = m_Nam->get(request);
+    QEventLoop loop;
+    QTimer::singleShot(HESTIA_SESSION_PREPARE_TIMEOUT_MS, &loop, &QEventLoop::quit);
+    connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+    loop.exec(QEventLoop::ExcludeUserInputEvents);
+    disconnect(sslErrorsConnection);
+
+    const bool success = reply->isFinished() && reply->error() == QNetworkReply::NoError &&
+            reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() >= 200 &&
+            reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() < 300;
+    QJsonParseError error;
+    const QJsonDocument response = QJsonDocument::fromJson(reply->readAll(), &error);
+    delete reply;
+    if (!success || error.error != QJsonParseError::NoError || !response.isObject() ||
+            !response.object().value("ok").toBool() || !response.object().value("text").isString()) {
+        qDebug() << "[Hestia] Host clipboard is unavailable";
+        return false;
+    }
+
+    *text = response.object().value("text").toString();
+    return true;
+}
+
+bool NvHTTP::setHestiaClipboard(const QString& text)
+{
+    if (m_ServerCert.isNull() || text.contains(QChar::Null) || text.toUtf8().size() > 64 * 1024) {
+        return false;
+    }
+
+    QUrl url;
+    url.setScheme("https");
+    url.setHost(m_Address.address());
+    url.setPort(m_Address.port() + 1);
+    url.setPath("/api/hestia/v1/clipboard");
+    QNetworkRequest request(url);
+    request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+    request.setSslConfiguration(IdentityManager::get()->getSslConfig());
+    auto sslErrorsConnection = connect(m_Nam, &QNetworkAccessManager::sslErrors, this, &NvHTTP::handleSslErrors);
+    QNetworkReply* reply = m_Nam->post(request, QJsonDocument(QJsonObject {{"text", text}}).toJson(QJsonDocument::Compact));
+    QEventLoop loop;
+    QTimer::singleShot(HESTIA_SESSION_PREPARE_TIMEOUT_MS, &loop, &QEventLoop::quit);
+    connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+    loop.exec(QEventLoop::ExcludeUserInputEvents);
+    disconnect(sslErrorsConnection);
+
+    const bool success = reply->isFinished() && reply->error() == QNetworkReply::NoError &&
+            reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() >= 200 &&
+            reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() < 300;
+    QJsonParseError error;
+    const QJsonDocument response = QJsonDocument::fromJson(reply->readAll(), &error);
+    delete reply;
+    return success && error.error == QJsonParseError::NoError && response.isObject() &&
+            response.object().value("ok").toBool();
+}
+
+bool NvHTTP::runHestiaServerCommand(int commandId)
+{
+    if (m_ServerCert.isNull() || commandId < 0) {
+        return false;
+    }
+
+    QUrl url;
+    url.setScheme("https");
+    url.setHost(m_Address.address());
+    url.setPort(m_Address.port() + 1);
+    url.setPath("/api/hestia/v1/commands/run");
+    QNetworkRequest request(url);
+    request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+    request.setSslConfiguration(IdentityManager::get()->getSslConfig());
+    auto sslErrorsConnection = connect(m_Nam, &QNetworkAccessManager::sslErrors, this, &NvHTTP::handleSslErrors);
+    QNetworkReply* reply = m_Nam->post(request, QJsonDocument(QJsonObject {{"id", commandId}}).toJson(QJsonDocument::Compact));
+    QEventLoop loop;
+    QTimer::singleShot(HESTIA_SESSION_PREPARE_TIMEOUT_MS, &loop, &QEventLoop::quit);
+    connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+    loop.exec(QEventLoop::ExcludeUserInputEvents);
+    disconnect(sslErrorsConnection);
+
+    const bool success = reply->isFinished() && reply->error() == QNetworkReply::NoError &&
+            reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() >= 200 &&
+            reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() < 300;
+    QJsonParseError error;
+    const QJsonDocument response = QJsonDocument::fromJson(reply->readAll(), &error);
+    delete reply;
+    return success && error.error == QJsonParseError::NoError && response.isObject() &&
+            response.object().value("ok").toBool();
 }
 
 void

@@ -11,6 +11,7 @@
 #include <xf86drmMode.h>
 
 #include <set>
+#include <optional>
 #include <unordered_map>
 #include <mutex>
 
@@ -839,4 +840,3 @@ private:
     EglImageFactory m_EglImageFactory;
 #endif
 };
-

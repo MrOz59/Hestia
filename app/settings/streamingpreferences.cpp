@@ -25,6 +25,10 @@
 #define SER_AUDIOCFG "audiocfg"
 #define SER_VIDEOCFG "videocfg"
 #define SER_HDR "hdr"
+#define SER_HESTIA_VDISPLAY "hestiaVirtualDisplay"
+#define SER_HESTIA_CLIPBOARD_SYNC "hestiaClipboardSync"
+#define SER_HESTIA_SCALE "hestiaScaleFactor"
+#define SER_HESTIA_LAUNCH_MODE "hestiaLaunchMode"
 #define SER_YUV444 "yuv444"
 #define SER_VIDEODEC "videodec"
 #define SER_WINDOWMODE "windowmode"
@@ -151,6 +155,14 @@ void StreamingPreferences::reload()
     swapFaceButtons = settings.value(SER_SWAPFACEBUTTONS, false).toBool();
     keepAwake = settings.value(SER_KEEPAWAKE, true).toBool();
     enableHdr = settings.value(SER_HDR, false).toBool();
+    hestiaVirtualDisplay = settings.value(SER_HESTIA_VDISPLAY, true).toBool();
+    hestiaClipboardSync = settings.value(SER_HESTIA_CLIPBOARD_SYNC, false).toBool();
+    hestiaScaleFactor = qBound(100, settings.value(SER_HESTIA_SCALE, 100).toInt(), 500);
+    hestiaLaunchMode = static_cast<HestiaLaunchMode>(settings.value(SER_HESTIA_LAUNCH_MODE,
+                                              static_cast<int>(HestiaLaunchMode::HLM_NORMAL)).toInt());
+    if (hestiaLaunchMode != HLM_GAMESCOPE) {
+        hestiaLaunchMode = HLM_NORMAL;
+    }
     captureSysKeysMode = static_cast<CaptureSysKeysMode>(settings.value(SER_CAPTURESYSKEYS,
                                                          static_cast<int>(CaptureSysKeysMode::CSK_OFF)).toInt());
     audioConfig = static_cast<AudioConfig>(settings.value(SER_AUDIOCFG,
@@ -344,6 +356,10 @@ void StreamingPreferences::save()
     settings.setValue(SER_SHOWPERFOVERLAY, showPerformanceOverlay);
     settings.setValue(SER_AUDIOCFG, static_cast<int>(audioConfig));
     settings.setValue(SER_HDR, enableHdr);
+    settings.setValue(SER_HESTIA_VDISPLAY, hestiaVirtualDisplay);
+    settings.setValue(SER_HESTIA_CLIPBOARD_SYNC, hestiaClipboardSync);
+    settings.setValue(SER_HESTIA_SCALE, hestiaScaleFactor);
+    settings.setValue(SER_HESTIA_LAUNCH_MODE, static_cast<int>(hestiaLaunchMode));
     settings.setValue(SER_YUV444, enableYUV444);
     settings.setValue(SER_VIDEOCFG, static_cast<int>(videoCodecConfig));
     settings.setValue(SER_VIDEODEC, static_cast<int>(videoDecoderSelection));

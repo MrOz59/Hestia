@@ -3,6 +3,7 @@
 #include "identitymanager.h"
 #include "nvapp.h"
 #include "nvaddress.h"
+#include "hestiacapabilities.h"
 
 #include <Limelight.h>
 
@@ -11,6 +12,8 @@
 #include <QNetworkReply>
 
 class NvComputer;
+class QJsonArray;
+class QJsonObject;
 
 class NvDisplayMode
 {
@@ -119,6 +122,39 @@ public:
 
     QString
     getServerInfo(NvLogLevel logLevel, bool fastFail = false);
+
+    bool
+    probeHestiaCapabilities(HestiaCapabilities* capabilities);
+
+    bool
+    prepareHestiaSession(const QJsonObject& sessionRequest);
+
+    bool
+    stopHestiaSession();
+
+    bool
+    getHestiaDisplayStatus(QJsonObject* status);
+
+    bool
+    recoverHestiaDisplay(bool force, QJsonObject* status);
+
+    bool
+    getHestiaClientPermissions(QJsonObject* permissions);
+
+    bool
+    getHestiaDiagnostics(QJsonObject* diagnostics);
+
+    bool
+    getHestiaClipboard(QString* text);
+
+    bool
+    setHestiaClipboard(const QString& text);
+
+    bool
+    getHestiaServerCommands(QJsonArray* commands);
+
+    bool
+    runHestiaServerCommand(int commandId);
 
     static
     void

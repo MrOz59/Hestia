@@ -1,0 +1,41 @@
+2026/06/24 22:40:54 main.go:20: Starting JSSON Language Server...
+2026/06/24 22:40:54 server.go:40: JSSON Language Server starting...
+2026/06/24 22:40:54 server.go:135: Received method: initialize
+2026/06/24 22:40:54 server.go:135: Received method: initialized
+2026/06/24 22:40:55 server.go:135: Received method: $/setTrace
+2026/06/24 22:40:55 server.go:159: Unhandled method: $/setTrace
+2026/06/24 22:40:55 server.go:135: Received method: $/setTrace
+2026/06/24 22:40:55 server.go:159: Unhandled method: $/setTrace
+2026/06/24 22:40:55 server.go:135: Received method: $/setTrace
+2026/06/24 22:40:55 server.go:159: Unhandled method: $/setTrace
+2026/06/24 22:40:55 server.go:135: Received method: $/setTrace
+2026/06/24 22:40:55 server.go:159: Unhandled method: $/setTrace
+2026/06/24 22:40:55 server.go:135: Received method: $/setTrace
+2026/06/24 22:40:55 server.go:159: Unhandled method: $/setTrace
+2026/06/24 22:40:56 server.go:135: Received method: $/setTrace
+2026/06/24 22:40:56 server.go:159: Unhandled method: $/setTrace
+2026/06/24 22:41:15 server.go:135: Received method: $/setTrace
+2026/06/24 22:41:15 server.go:159: Unhandled method: $/setTrace
+2026/06/24 23:00:59 server.go:135: Received method: shutdown
+2026/06/24 23:00:59 server.go:135: Received method: exit
+2026/06/24 23:00:59 server.go:53: Error handling message: EOF
+2026/06/25 09:27:58 main.go:20: Starting JSSON Language Server...
+2026/06/25 09:27:58 server.go:40: JSSON Language Server starting...
+2026/06/25 09:27:58 server.go:135: Received method: initialize
+2026/06/25 09:27:58 server.go:135: Received method: initialized
+2026/06/25 09:28:02 server.go:135: Received method: $/setTrace
+2026/06/25 09:28:02 server.go:159: Unhandled method: $/setTrace
+2026/06/25 09:35:40 server.go:135: Received method: $/setTrace
+2026/06/25 09:35:40 server.go:159: Unhandled method: $/setTrace
+2026/06/25 09:39:44 server.go:135: Received method: $/setTrace
+2026/06/25 09:39:44 server.go:159: Unhandled method: $/setTrace
+2026/06/25 09:39:44 server.go:135: Received method: $/setTrace
+2026/06/25 09:39:44 server.go:159: Unhandled method: $/setTrace
+2026/06/25 09:39:44 server.go:135: Received method: $/setTrace
+2026/06/25 09:39:44 server.go:159: Unhandled method: $/setTrace
+2026/06/25 09:39:44 server.go:135: Received method: $/setTrace
+2026/06/25 09:39:44 server.go:159: Unhandled method: $/setTrace
+2026/06/25 09:39:44 server.go:135: Received method: $/setTrace
+2026/06/25 09:39:44 server.go:159: Unhandled method: $/setTrace
+2026/06/25 09:39:46 server.go:135: Received method: $/setTrace
+2026/06/25 09:39:46 server.go:159: Unhandled method: $/setTrace

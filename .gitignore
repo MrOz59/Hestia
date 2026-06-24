@@ -7,3 +7,19 @@ build/
 libs/
 config.tests/*/.qmake.stash
 config.tests/*/Makefile
+
+# Codex docs and sync files
+docs/codex/
+CODEX.md
+README_CODEX_SYNC.md
+*CODEX*.md
+*codex*.md
+
+# Prompts / agents
+PROMPTS/
+prompts/
+*.prompt
+*.prompt.md
+*.instructions.md
+*.agent.md
+copilot-instructions.md

@@ -27,6 +27,7 @@ copilot-instructions.md
 # Build artifacts and binary files
 **/release/
 **/debug/
+app/moonlight
 *.o
 *.obj
 *.so

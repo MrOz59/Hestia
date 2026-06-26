@@ -21,8 +21,12 @@ public:
 
     ~NvPairingManager();
 
+    // When otpPassphrase is non-empty, performs an Apollo/Hermes OTP
+    // (host-initiated) pairing: 'pin' is the host-generated one-time code and
+    // an otpauth proof is sent so the host can auto-accept without web UI
+    // interaction. An empty passphrase yields the standard PIN pairing flow.
     PairState
-    pair(QString appVersion, QString pin, QSslCertificate& serverCert);
+    pair(QString appVersion, QString pin, QString otpPassphrase, QSslCertificate& serverCert);
 
 private:
     QByteArray

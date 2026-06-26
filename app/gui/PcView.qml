@@ -46,8 +46,9 @@ CenteredGridView {
 
     function pairingComplete(error)
     {
-        // Close the PIN dialog
+        // Close the PIN dialogs
         pairDialog.close()
+        otpPairProgressDialog.close()
 
         // Display a failed dialog if we got an error
         if (error !== undefined) {
@@ -184,6 +185,16 @@ CenteredGridView {
                     text: qsTr("Wake PC")
                     onTriggered: computerModel.wakeComputer(index)
                     visible: !model.online && model.wakeable
+                }
+                NavigableMenuItem {
+                    text: qsTr("Pair using Host Code (OTP)")
+                    visible: model.online && !model.paired
+                    onTriggered: {
+                        otpPairDialog.pcIndex = index
+                        otpPinField.text = ""
+                        otpPassphraseField.text = ""
+                        otpPairDialog.open()
+                    }
                 }
                 NavigableMenuItem {
                     text: qsTr("Test Network")
@@ -385,6 +396,49 @@ CenteredGridView {
         onRejected: {
             // FIXME: We should interrupt pairing here
         }
+    }
+
+    NavigableDialog {
+        id: otpPairDialog
+        property int pcIndex: -1
+        title: qsTr("Pair using Host Code")
+        standardButtons: Dialog.Ok | Dialog.Cancel
+
+        onAccepted: {
+            if (otpPinField.text.length === 0) {
+                return
+            }
+            computerModel.pairComputerOtp(pcIndex, otpPinField.text, otpPassphraseField.text)
+            otpPairProgressDialog.open()
+        }
+
+        ColumnLayout {
+            spacing: 8
+            Label {
+                Layout.maximumWidth: 360
+                wrapMode: Text.WordWrap
+                text: qsTr("On your host PC, open the Apollo/Hermes web UI and generate a pairing code. Enter the code and passphrase it shows below.")
+            }
+            Label { text: qsTr("Pairing code (PIN)") }
+            TextField {
+                id: otpPinField
+                Layout.fillWidth: true
+                inputMethodHints: Qt.ImhDigitsOnly
+                maximumLength: 8
+            }
+            Label { text: qsTr("Passphrase (optional)") }
+            TextField {
+                id: otpPassphraseField
+                Layout.fillWidth: true
+            }
+        }
+    }
+
+    NavigableMessageDialog {
+        id: otpPairProgressDialog
+        closePolicy: Popup.CloseOnEscape
+        text: qsTr("Pairing with the host. This dialog will close when pairing is completed.")
+        standardButtons: Dialog.Cancel
     }
 
     NavigableMessageDialog {

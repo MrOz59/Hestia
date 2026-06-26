@@ -43,6 +43,8 @@ public:
 
     Q_INVOKABLE void pairComputer(int computerIndex, QString pin);
 
+    Q_INVOKABLE void pairComputerOtp(int computerIndex, QString otpPin, QString otpPassphrase);
+
     Q_INVOKABLE void testConnectionForComputer(int computerIndex);
 
     Q_INVOKABLE void wakeComputer(int computerIndex);

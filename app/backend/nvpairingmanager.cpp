@@ -204,7 +204,7 @@ NvPairingManager::saltPin(const QByteArray& salt, QString pin)
 }
 
 NvPairingManager::PairState
-NvPairingManager::pair(QString appVersion, QString pin, QSslCertificate& serverCert)
+NvPairingManager::pair(QString appVersion, QString pin, QString otpPassphrase, QSslCertificate& serverCert)
 {
     int serverMajorVersion = NvHTTP::parseQuad(appVersion).at(0);
     qInfo() << "Pairing with server generation:" << serverMajorVersion;
@@ -230,10 +230,22 @@ NvPairingManager::pair(QString appVersion, QString pin, QSslCertificate& serverC
     QByteArray aesKey = QCryptographicHash::hash(saltedPin, hashAlgo).constData();
     aesKey.truncate(16);
 
+    QString getCertArgs = "devicename=roth&updateState=1&phrase=getservercert&salt=" +
+            salt.toHex() + "&clientcert=" + IdentityManager::get()->getCertificate().toHex();
+
+    // For host-initiated OTP pairing, prove knowledge of the one-time PIN and
+    // passphrase so the host auto-accepts. The proof matches Apollo/Hermes:
+    // uppercase hex of SHA-256(pin + saltHex + passphrase), where saltHex is the
+    // exact lowercase salt string sent in the request above.
+    if (!otpPassphrase.isEmpty()) {
+        QByteArray otpInput = pin.toUtf8() + salt.toHex() + otpPassphrase.toUtf8();
+        QByteArray otpAuth = QCryptographicHash::hash(otpInput, QCryptographicHash::Sha256).toHex().toUpper();
+        getCertArgs += "&otpauth=" + otpAuth;
+    }
+
     QString getCert = m_Http.openConnectionToString(m_Http.m_BaseUrlHttp,
                                                     "pair",
-                                                    "devicename=roth&updateState=1&phrase=getservercert&salt=" +
-                                                    salt.toHex() + "&clientcert=" + IdentityManager::get()->getCertificate().toHex(),
+                                                    getCertArgs,
                                                     0);
     NvHTTP::verifyResponseStatus(getCert);
     if (NvHTTP::getXmlString(getCert, "paired") != "1")

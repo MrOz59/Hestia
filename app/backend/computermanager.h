@@ -231,7 +231,7 @@ public:
 
     QString generatePinString();
 
-    void pairHost(NvComputer* computer, QString pin);
+    void pairHost(NvComputer* computer, QString pin, QString otpPassphrase = QString());
 
     void quitRunningApp(NvComputer* computer);
 

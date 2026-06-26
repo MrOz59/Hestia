@@ -592,10 +592,11 @@ class PendingPairingTask : public QObject, public QRunnable
     Q_OBJECT
 
 public:
-    PendingPairingTask(ComputerManager* computerManager, NvComputer* computer, QString pin)
+    PendingPairingTask(ComputerManager* computerManager, NvComputer* computer, QString pin, QString otpPassphrase)
         : m_ComputerManager(computerManager),
           m_Computer(computer),
-          m_Pin(pin)
+          m_Pin(pin),
+          m_OtpPassphrase(otpPassphrase)
     {
         connect(this, &PendingPairingTask::pairingCompleted,
                 computerManager, &ComputerManager::pairingCompleted);
@@ -610,7 +611,7 @@ private:
         NvPairingManager pairingManager(m_Computer);
 
         try {
-           NvPairingManager::PairState result = pairingManager.pair(m_Computer->appVersion, m_Pin, m_Computer->serverCert);
+           NvPairingManager::PairState result = pairingManager.pair(m_Computer->appVersion, m_Pin, m_OtpPassphrase, m_Computer->serverCert);
            switch (result)
            {
            case NvPairingManager::PairState::PIN_WRONG:
@@ -651,13 +652,14 @@ private:
     ComputerManager* m_ComputerManager;
     NvComputer* m_Computer;
     QString m_Pin;
+    QString m_OtpPassphrase;
 };
 
-void ComputerManager::pairHost(NvComputer* computer, QString pin)
+void ComputerManager::pairHost(NvComputer* computer, QString pin, QString otpPassphrase)
 {
     // Punt to a worker thread to avoid stalling the
     // UI while waiting for pairing to complete
-    PendingPairingTask* pairing = new PendingPairingTask(this, computer, pin);
+    PendingPairingTask* pairing = new PendingPairingTask(this, computer, pin, otpPassphrase);
     QThreadPool::globalInstance()->start(pairing);
 }
 

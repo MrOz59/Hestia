@@ -431,3 +431,71 @@ int StreamingPreferences::getDefaultBitrate(int width, int height, int fps, bool
 
     return qRound(resolutionFactor * frameRateFactor) * 1000;
 }
+
+void StreamingPreferences::applyPreset(StreamingPreset preset, int nativeWidth, int nativeHeight, int nativeFps)
+{
+    if (preset == PRESET_CUSTOM) {
+        return;
+    }
+
+    // Fall back to sensible defaults if the caller couldn't determine the
+    // display's native mode.
+    if (nativeWidth <= 0 || nativeHeight <= 0) {
+        nativeWidth = 1920;
+        nativeHeight = 1080;
+    }
+    if (nativeFps <= 0) {
+        nativeFps = 60;
+    }
+
+    int targetWidth = nativeWidth;
+    int targetHeight = nativeHeight;
+    int targetFps = nativeFps;
+    double bitrateScale = 1.0;
+
+    // Caps a resolution to a maximum pixel count while preserving aspect ratio,
+    // so non-16:9 (e.g. handheld) panels scale down correctly.
+    auto capResolution = [&](int maxWidth, int maxHeight) {
+        const qint64 maxPixels = (qint64)maxWidth * maxHeight;
+        const qint64 pixels = (qint64)targetWidth * targetHeight;
+        if (pixels > maxPixels) {
+            const double scale = qSqrt((double)maxPixels / pixels);
+            // Round to even dimensions, which encoders universally require.
+            targetWidth = (int)(targetWidth * scale) & ~1;
+            targetHeight = (int)(targetHeight * scale) & ~1;
+        }
+    };
+
+    switch (preset) {
+    case PRESET_QUALITY:
+        // Native resolution and refresh, with extra bitrate headroom.
+        bitrateScale = 1.25;
+        break;
+    case PRESET_BALANCED:
+        // Native resolution, but cap frame rate at 60 for a lighter load.
+        targetFps = qMin(nativeFps, 60);
+        break;
+    case PRESET_FAST:
+        // Cap to 1080p60 for low latency on weaker decoders/networks.
+        capResolution(1920, 1080);
+        targetFps = qMin(nativeFps, 60);
+        bitrateScale = 0.9;
+        break;
+    case PRESET_BATTERY:
+        // Minimal load for handhelds: 720p30 and a reduced bitrate.
+        capResolution(1280, 720);
+        targetFps = qMin(nativeFps, 30);
+        bitrateScale = 0.7;
+        break;
+    case PRESET_CUSTOM:
+        return;
+    }
+
+    width = targetWidth;
+    height = targetHeight;
+    fps = targetFps;
+    bitrateKbps = qRound(getDefaultBitrate(targetWidth, targetHeight, targetFps, enableYUV444) * bitrateScale);
+
+    emit displayModeChanged();
+    emit bitrateChanged();
+}

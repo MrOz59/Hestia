@@ -112,6 +112,88 @@ Flickable {
 
                 Label {
                     width: parent.width
+                    text: qsTr("Quality preset")
+                    font.pointSize: 12
+                    wrapMode: Text.Wrap
+                }
+
+                Label {
+                    width: parent.width
+                    text: qsTr("Presets set resolution, frame rate, codec, and bitrate for you. Choosing one applies values based on this display; you can still fine-tune below.")
+                    font.pointSize: 9
+                    wrapMode: Text.Wrap
+                }
+
+                AutoResizingComboBox {
+                    id: presetComboBox
+                    textRole: "text"
+                    model: ListModel {
+                        id: presetListModel
+                        ListElement { text: qsTr("Custom"); val: 0 }       // PRESET_CUSTOM
+                        ListElement { text: qsTr("Fast"); val: 1 }         // PRESET_FAST
+                        ListElement { text: qsTr("Balanced"); val: 2 }     // PRESET_BALANCED
+                        ListElement { text: qsTr("Quality"); val: 3 }      // PRESET_QUALITY
+                        ListElement { text: qsTr("Battery Saver"); val: 4 }// PRESET_BATTERY
+                    }
+
+                    Component.onCompleted: {
+                        // No preset is active until the user picks one; manual edits
+                        // elsewhere are reflected as "Custom".
+                        currentIndex = 0
+                    }
+
+                    // Called by the video controls when the user changes a value
+                    // by hand, so the preset selector stops claiming a preset.
+                    function markCustom() {
+                        currentIndex = 0
+                    }
+
+                    // Picks the best codec that has hardware decode for the target
+                    // mode, preferring efficiency (AV1 > HEVC > H.264). For the
+                    // battery preset, the same order applies since a lighter codec
+                    // also means a lower bitrate at equal quality.
+                    function pickBestCodec(width, height, fps) {
+                        var hdr = StreamingPreferences.enableHdr
+                        var yuv444 = StreamingPreferences.enableYUV444
+                        var order = ["av1", "hevc", "h264"]
+                        for (var i = 0; i < order.length; i++) {
+                            if (SystemProperties.probeCodecAvailability(order[i], hdr, yuv444, width, height, fps) === "hardware") {
+                                if (order[i] === "av1") return StreamingPreferences.VCC_FORCE_AV1
+                                if (order[i] === "hevc") return StreamingPreferences.VCC_FORCE_HEVC
+                                return StreamingPreferences.VCC_FORCE_H264
+                            }
+                        }
+                        // Nothing hardware-decodes; let the stream-time logic decide.
+                        return StreamingPreferences.VCC_AUTO
+                    }
+
+                    onActivated: {
+                        var preset = presetListModel.get(currentIndex).val
+                        if (preset === 0 /* PRESET_CUSTOM */) {
+                            return
+                        }
+
+                        // Use the primary display's native resolution and refresh.
+                        SystemProperties.refreshDisplays()
+                        var nativeRes = SystemProperties.getNativeResolution(0)
+                        var nativeFps = SystemProperties.getRefreshRate(0)
+
+                        StreamingPreferences.applyPreset(preset, nativeRes.width, nativeRes.height, nativeFps)
+
+                        // Choose a codec suited to what the device can actually decode.
+                        StreamingPreferences.videoCodecConfig =
+                                pickBestCodec(StreamingPreferences.width, StreamingPreferences.height, StreamingPreferences.fps)
+
+                        // Reflect the applied values in the other controls.
+                        resolutionComboBox.syncToPreferences()
+                        fpsComboBox.syncToPreferences()
+                        codecComboBox.syncToPreferences()
+                        slider.value = StreamingPreferences.bitrateKbps
+                    }
+                }
+
+                Label {
+                    width: parent.width
                     id: resFPStitle
                     text: qsTr("Resolution and FPS")
                     font.pointSize: 12
@@ -159,6 +241,40 @@ Flickable {
                                                                "video_height": ""+rect.height,
                                                                "is_custom": false
                                                            })
+                            }
+                        }
+
+                        // Selects the combo entry matching the resolution currently in
+                        // StreamingPreferences, adding a custom entry if none matches.
+                        // Used after a preset changes the resolution.
+                        function syncToPreferences() {
+                            var saved_width = StreamingPreferences.width
+                            var saved_height = StreamingPreferences.height
+                            for (var i = 0; i < resolutionListModel.count; i++) {
+                                if (resolutionListModel.get(i).is_custom) {
+                                    continue
+                                }
+                                var el_width = parseInt(resolutionListModel.get(i).video_width);
+                                var el_height = parseInt(resolutionListModel.get(i).video_height);
+                                if (saved_width === el_width && saved_height === el_height) {
+                                    currentIndex = i
+                                    lastIndexValue = i
+                                    recalculateWidth()
+                                    return
+                                }
+                            }
+
+                            // No preset entry matched; record it as the custom entry.
+                            for (var k = 0; k < resolutionListModel.count; k++) {
+                                if (resolutionListModel.get(k).is_custom) {
+                                    resolutionListModel.setProperty(k, "video_width", ""+saved_width)
+                                    resolutionListModel.setProperty(k, "video_height", ""+saved_height)
+                                    resolutionListModel.setProperty(k, "text", qsTr("Custom")+" ("+saved_width+"x"+saved_height+")")
+                                    currentIndex = k
+                                    lastIndexValue = k
+                                    recalculateWidth()
+                                    return
+                                }
                             }
                         }
 
@@ -295,6 +411,7 @@ Flickable {
 
                         // ::onActivated must be used, as it only listens for when the index is changed by a human
                         onActivated : {
+                            presetComboBox.markCustom()
                             if (resolutionListModel.get(currentIndex).is_custom) {
                                 customResolutionDialog.open()
                             }
@@ -590,6 +707,35 @@ Flickable {
                             return indexToAdd
                         }
 
+                        // Selects the entry matching the frame rate currently in
+                        // StreamingPreferences, used after a preset changes the FPS.
+                        function syncToPreferences() {
+                            var saved_fps = StreamingPreferences.fps
+                            for (var i = 0; i < fpsListModel.count; i++) {
+                                if (fpsListModel.get(i).is_custom) {
+                                    continue
+                                }
+                                if (saved_fps === parseInt(fpsListModel.get(i).video_fps)) {
+                                    currentIndex = i
+                                    lastIndexValue = i
+                                    recalculateWidth()
+                                    return
+                                }
+                            }
+
+                            // No fixed entry matched; record it as the custom entry.
+                            for (var k = 0; k < fpsListModel.count; k++) {
+                                if (fpsListModel.get(k).is_custom) {
+                                    fpsListModel.setProperty(k, "video_fps", ""+saved_fps)
+                                    fpsListModel.setProperty(k, "text", qsTr("Custom (%1 FPS)").arg(saved_fps))
+                                    currentIndex = k
+                                    lastIndexValue = k
+                                    recalculateWidth()
+                                    return
+                                }
+                            }
+                        }
+
                         function reinitialize() {
                             // Add native refresh rate for all attached displays
                             var done = false
@@ -656,6 +802,7 @@ Flickable {
                         textRole: "text"
                         // ::onActivated must be used, as it only listens for when the index is changed by a human
                         onActivated : {
+                            presetComboBox.markCustom()
                             if (model.get(currentIndex).is_custom) {
                                 customFpsDialog.open()
                             }
@@ -705,6 +852,7 @@ Flickable {
 
                         onMoved: {
                             StreamingPreferences.autoAdjustBitrate = false
+                            presetComboBox.markCustom()
                         }
 
                         Component.onCompleted: {
@@ -1602,6 +1750,20 @@ Flickable {
                     }
 
                     id: codecComboBox
+
+                    // Selects the entry matching the codec currently in
+                    // StreamingPreferences, used after a preset sets the codec.
+                    function syncToPreferences() {
+                        var saved_vcc = StreamingPreferences.videoCodecConfig
+                        for (var i = 0; i < codecListModel.count; i++) {
+                            if (saved_vcc === codecListModel.get(i).val) {
+                                currentIndex = i
+                                return
+                            }
+                        }
+                        currentIndex = 0
+                    }
+
                     textRole: "text"
                     model: ListModel {
                         id: codecListModel
@@ -1625,6 +1787,7 @@ Flickable {
                     // ::onActivated must be used, as it only listens for when the index is changed by a human
                     onActivated : {
                         if (enabled) {
+                            presetComboBox.markCustom()
                             StreamingPreferences.videoCodecConfig = codecListModel.get(currentIndex).val
                         }
                     }

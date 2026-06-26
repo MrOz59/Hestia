@@ -14,6 +14,24 @@ public:
     Q_INVOKABLE static int
     getDefaultBitrate(int width, int height, int fps, bool yuv444);
 
+    // Quality presets (roadmap Phase 1.2). PRESET_CUSTOM means the user has set
+    // values manually and no preset is active.
+    enum StreamingPreset
+    {
+        PRESET_CUSTOM,
+        PRESET_FAST,      // lower resolution/fps for lowest latency and load
+        PRESET_BALANCED,  // native resolution, fps capped at 60
+        PRESET_QUALITY,   // native resolution and refresh rate
+        PRESET_BATTERY,   // minimal resolution/fps/bitrate for handhelds
+    };
+    Q_ENUM(StreamingPreset)
+
+    // Applies a preset's resolution, frame rate, and bitrate, derived from the
+    // display's native resolution/refresh passed in by the caller (the GUI knows
+    // these via SystemProperties). Codec selection is handled separately by the
+    // GUI so it can consult the capability probe. Does nothing for PRESET_CUSTOM.
+    Q_INVOKABLE void applyPreset(StreamingPreset preset, int nativeWidth, int nativeHeight, int nativeFps);
+
     Q_INVOKABLE void save();
 
     void reload();

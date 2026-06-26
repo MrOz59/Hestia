@@ -90,6 +90,7 @@ SOURCES       = backend/nvaddress.cpp \
 		settings/mappingmanager.cpp \
 		gui/sdlgamepadkeynavigation.cpp \
 		streaming/video/overlaymanager.cpp \
+		streaming/video/statsdiagnostics.cpp \
 		backend/systemproperties.cpp \
 		wm.cpp \
 		streaming/video/ffmpeg.cpp \
@@ -165,6 +166,7 @@ OBJECTS       = debug/nvaddress.o \
 		debug/mappingmanager.o \
 		debug/sdlgamepadkeynavigation.o \
 		debug/overlaymanager.o \
+		debug/statsdiagnostics.o \
 		debug/systemproperties.o \
 		debug/wm.o \
 		debug/ffmpeg.o \
@@ -240,6 +242,7 @@ DIST          = .qmake.stash \
 		settings/mappingmanager.h \
 		gui/sdlgamepadkeynavigation.h \
 		streaming/video/overlaymanager.h \
+		streaming/video/statsdiagnostics.h \
 		backend/systemproperties.h \
 		streaming/video/ffmpeg.h \
 		streaming/video/ffmpeg-renderers/renderer.h \
@@ -292,6 +295,7 @@ DIST          = .qmake.stash \
 		settings/mappingmanager.cpp \
 		gui/sdlgamepadkeynavigation.cpp \
 		streaming/video/overlaymanager.cpp \
+		streaming/video/statsdiagnostics.cpp \
 		backend/systemproperties.cpp \
 		wm.cpp \
 		streaming/video/ffmpeg.cpp \
@@ -337,8 +341,8 @@ distdir: FORCE
 	$(COPY_FILE) --parents $(DIST) $(DISTDIR)/
 	$(COPY_FILE) --parents resources.qrc qml.qrc $(DISTDIR)/
 	$(COPY_FILE) --parents /usr/lib/qt6/mkspecs/features/data/dummy.cpp $(DISTDIR)/
-	$(COPY_FILE) --parents SDL_compat.h backend/nvaddress.h backend/hestiacapabilities.h backend/nvapp.h cli/pair.h settings/compatfetcher.h settings/mappingfetcher.h utils.h backend/computerseeker.h backend/identitymanager.h backend/nvcomputer.h backend/nvhttp.h backend/nvpairingmanager.h backend/computermanager.h backend/boxartmanager.h backend/richpresencemanager.h cli/commandlineparser.h cli/deeplinkparser.h cli/listapps.h cli/quitstream.h cli/startstream.h settings/streamingpreferences.h streaming/input/input.h streaming/session.h streaming/audio/renderers/renderer.h streaming/audio/renderers/sdl.h gui/computermodel.h gui/appmodel.h streaming/video/decoder.h streaming/bandwidth.h streaming/streamutils.h backend/autoupdatechecker.h path.h settings/mappingmanager.h gui/sdlgamepadkeynavigation.h streaming/video/overlaymanager.h backend/systemproperties.h streaming/video/ffmpeg.h streaming/video/ffmpeg-renderers/renderer.h streaming/video/ffmpeg-renderers/genhwaccel.h streaming/video/ffmpeg-renderers/sdlvid.h streaming/video/ffmpeg-renderers/swframemapper.h streaming/video/ffmpeg-renderers/pacer/pacer.h streaming/video/ffmpeg-renderers/vaapi.h streaming/video/ffmpeg-renderers/vdpau.h streaming/video/ffmpeg-renderers/drm.h streaming/video/ffmpeg-renderers/plvk.h streaming/video/ffmpeg-renderers/eglvid.h streaming/video/ffmpeg-renderers/eglimagefactory.h streaming/video/ffmpeg-renderers/pacer/waylandvsyncsource.h $(DISTDIR)/
-	$(COPY_FILE) --parents backend/nvaddress.cpp backend/hestiacapabilities.cpp backend/nvapp.cpp cli/pair.cpp main.cpp backend/computerseeker.cpp backend/identitymanager.cpp backend/nvcomputer.cpp backend/nvhttp.cpp backend/nvpairingmanager.cpp backend/computermanager.cpp backend/boxartmanager.cpp backend/richpresencemanager.cpp cli/commandlineparser.cpp cli/deeplinkparser.cpp cli/listapps.cpp cli/quitstream.cpp cli/startstream.cpp settings/compatfetcher.cpp settings/mappingfetcher.cpp settings/streamingpreferences.cpp streaming/input/abstouch.cpp streaming/input/gamepad.cpp streaming/input/input.cpp streaming/input/keyboard.cpp streaming/input/mouse.cpp streaming/input/reltouch.cpp streaming/session.cpp streaming/audio/audio.cpp streaming/audio/renderers/sdlaud.cpp gui/computermodel.cpp gui/appmodel.cpp streaming/bandwidth.cpp streaming/streamutils.cpp backend/autoupdatechecker.cpp path.cpp settings/mappingmanager.cpp gui/sdlgamepadkeynavigation.cpp streaming/video/overlaymanager.cpp backend/systemproperties.cpp wm.cpp streaming/video/ffmpeg.cpp streaming/video/ffmpeg-renderers/genhwaccel.cpp streaming/video/ffmpeg-renderers/sdlvid.cpp streaming/video/ffmpeg-renderers/swframemapper.cpp streaming/video/ffmpeg-renderers/pacer/pacer.cpp streaming/video/ffmpeg-renderers/vaapi.cpp streaming/video/ffmpeg-renderers/vdpau.cpp streaming/video/ffmpeg-renderers/drm.cpp masterhook.c masterhook_internal.c streaming/video/ffmpeg-renderers/plvk.cpp streaming/video/ffmpeg-renderers/plvk_c.c streaming/video/ffmpeg-renderers/eglvid.cpp streaming/video/ffmpeg-renderers/egl_extensions.cpp streaming/video/ffmpeg-renderers/eglimagefactory.cpp streaming/video/ffmpeg-renderers/pacer/waylandvsyncsource.cpp $(DISTDIR)/
+	$(COPY_FILE) --parents SDL_compat.h backend/nvaddress.h backend/hestiacapabilities.h backend/nvapp.h cli/pair.h settings/compatfetcher.h settings/mappingfetcher.h utils.h backend/computerseeker.h backend/identitymanager.h backend/nvcomputer.h backend/nvhttp.h backend/nvpairingmanager.h backend/computermanager.h backend/boxartmanager.h backend/richpresencemanager.h cli/commandlineparser.h cli/deeplinkparser.h cli/listapps.h cli/quitstream.h cli/startstream.h settings/streamingpreferences.h streaming/input/input.h streaming/session.h streaming/audio/renderers/renderer.h streaming/audio/renderers/sdl.h gui/computermodel.h gui/appmodel.h streaming/video/decoder.h streaming/bandwidth.h streaming/streamutils.h backend/autoupdatechecker.h path.h settings/mappingmanager.h gui/sdlgamepadkeynavigation.h streaming/video/overlaymanager.h streaming/video/statsdiagnostics.h backend/systemproperties.h streaming/video/ffmpeg.h streaming/video/ffmpeg-renderers/renderer.h streaming/video/ffmpeg-renderers/genhwaccel.h streaming/video/ffmpeg-renderers/sdlvid.h streaming/video/ffmpeg-renderers/swframemapper.h streaming/video/ffmpeg-renderers/pacer/pacer.h streaming/video/ffmpeg-renderers/vaapi.h streaming/video/ffmpeg-renderers/vdpau.h streaming/video/ffmpeg-renderers/drm.h streaming/video/ffmpeg-renderers/plvk.h streaming/video/ffmpeg-renderers/eglvid.h streaming/video/ffmpeg-renderers/eglimagefactory.h streaming/video/ffmpeg-renderers/pacer/waylandvsyncsource.h $(DISTDIR)/
+	$(COPY_FILE) --parents backend/nvaddress.cpp backend/hestiacapabilities.cpp backend/nvapp.cpp cli/pair.cpp main.cpp backend/computerseeker.cpp backend/identitymanager.cpp backend/nvcomputer.cpp backend/nvhttp.cpp backend/nvpairingmanager.cpp backend/computermanager.cpp backend/boxartmanager.cpp backend/richpresencemanager.cpp cli/commandlineparser.cpp cli/deeplinkparser.cpp cli/listapps.cpp cli/quitstream.cpp cli/startstream.cpp settings/compatfetcher.cpp settings/mappingfetcher.cpp settings/streamingpreferences.cpp streaming/input/abstouch.cpp streaming/input/gamepad.cpp streaming/input/input.cpp streaming/input/keyboard.cpp streaming/input/mouse.cpp streaming/input/reltouch.cpp streaming/session.cpp streaming/audio/audio.cpp streaming/audio/renderers/sdlaud.cpp gui/computermodel.cpp gui/appmodel.cpp streaming/bandwidth.cpp streaming/streamutils.cpp backend/autoupdatechecker.cpp path.cpp settings/mappingmanager.cpp gui/sdlgamepadkeynavigation.cpp streaming/video/overlaymanager.cpp streaming/video/statsdiagnostics.cpp backend/systemproperties.cpp wm.cpp streaming/video/ffmpeg.cpp streaming/video/ffmpeg-renderers/genhwaccel.cpp streaming/video/ffmpeg-renderers/sdlvid.cpp streaming/video/ffmpeg-renderers/swframemapper.cpp streaming/video/ffmpeg-renderers/pacer/pacer.cpp streaming/video/ffmpeg-renderers/vaapi.cpp streaming/video/ffmpeg-renderers/vdpau.cpp streaming/video/ffmpeg-renderers/drm.cpp masterhook.c masterhook_internal.c streaming/video/ffmpeg-renderers/plvk.cpp streaming/video/ffmpeg-renderers/plvk_c.c streaming/video/ffmpeg-renderers/eglvid.cpp streaming/video/ffmpeg-renderers/egl_extensions.cpp streaming/video/ffmpeg-renderers/eglimagefactory.cpp streaming/video/ffmpeg-renderers/pacer/waylandvsyncsource.cpp $(DISTDIR)/
 	$(COPY_FILE) --parents languages/qml_zh_CN.ts languages/qml_de.ts languages/qml_fr.ts languages/qml_nb_NO.ts languages/qml_ru.ts languages/qml_es.ts languages/qml_ja.ts languages/qml_vi.ts languages/qml_th.ts languages/qml_ko.ts languages/qml_hu.ts languages/qml_nl.ts languages/qml_sv.ts languages/qml_tr.ts languages/qml_uk.ts languages/qml_zh_TW.ts languages/qml_el.ts languages/qml_hi.ts languages/qml_it.ts languages/qml_pt.ts languages/qml_pt_BR.ts languages/qml_pl.ts languages/qml_cs.ts languages/qml_he.ts languages/qml_ckb.ts languages/qml_lt.ts languages/qml_et.ts languages/qml_bg.ts languages/qml_eo.ts languages/qml_ta.ts $(DISTDIR)/
 
 
@@ -817,6 +821,7 @@ debug/main.o: main.cpp SDL_compat.h \
 		streaming/video/decoder.h \
 		../moonlight-common-c/moonlight-common-c/src/Limelight.h \
 		settings/streamingpreferences.h \
+		streaming/video/statsdiagnostics.h \
 		streaming/video/ffmpeg-renderers/renderer.h \
 		streaming/video/overlaymanager.h \
 		streaming/video/ffmpeg-renderers/pacer/pacer.h \
@@ -1226,6 +1231,7 @@ debug/session.o: streaming/session.cpp streaming/session.h \
 		utils.h \
 		streaming/video/ffmpeg.h \
 		streaming/bandwidth.h \
+		streaming/video/statsdiagnostics.h \
 		streaming/video/ffmpeg-renderers/renderer.h \
 		streaming/video/ffmpeg-renderers/pacer/pacer.h \
 		streaming/video/slvid.h
@@ -1349,6 +1355,13 @@ debug/overlaymanager.o: streaming/video/overlaymanager.cpp streaming/video/overl
 		path.h
 	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o debug/overlaymanager.o streaming/video/overlaymanager.cpp
 
+debug/statsdiagnostics.o: streaming/video/statsdiagnostics.cpp streaming/video/statsdiagnostics.h \
+		streaming/video/decoder.h \
+		../moonlight-common-c/moonlight-common-c/src/Limelight.h \
+		SDL_compat.h \
+		settings/streamingpreferences.h
+	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o debug/statsdiagnostics.o streaming/video/statsdiagnostics.cpp
+
 debug/systemproperties.o: backend/systemproperties.cpp backend/systemproperties.h \
 		SDL_compat.h \
 		utils.h \
@@ -1387,6 +1400,7 @@ debug/ffmpeg.o: streaming/video/ffmpeg.cpp ../moonlight-common-c/moonlight-commo
 		streaming/video/decoder.h \
 		SDL_compat.h \
 		settings/streamingpreferences.h \
+		streaming/video/statsdiagnostics.h \
 		streaming/video/ffmpeg-renderers/renderer.h \
 		streaming/video/overlaymanager.h \
 		streaming/video/ffmpeg-renderers/pacer/pacer.h \

@@ -976,6 +976,39 @@ void FFmpegVideoDecoder::stringifyVideoStats(VIDEO_STATS& stats, char* output, i
     }
 }
 
+void FFmpegVideoDecoder::appendDiagnosisText(const Diagnostics::Diagnosis& diagnosis,
+                                             const Diagnostics::SpikeHistory& history,
+                                             char* output, int length)
+{
+    // Append onto the end of whatever stringifyVideoStats already wrote.
+    int offset = (int)SDL_strlen(output);
+    if (offset >= length) {
+        return;
+    }
+
+    QByteArray summary = diagnosis.summary.toUtf8();
+    if (!summary.isEmpty()) {
+        int ret;
+        if (diagnosis.keyMetric.isEmpty()) {
+            ret = snprintf(&output[offset], length - offset, "\nDiagnosis: %s\n", summary.constData());
+        }
+        else {
+            QByteArray metric = diagnosis.keyMetric.toUtf8();
+            ret = snprintf(&output[offset], length - offset, "\nDiagnosis: %s (%s)\n",
+                           summary.constData(), metric.constData());
+        }
+        if (ret < 0 || ret >= length - offset) {
+            return;
+        }
+        offset += ret;
+    }
+
+    QByteArray spikes = history.summarize().toUtf8();
+    if (!spikes.isEmpty()) {
+        snprintf(&output[offset], length - offset, "%s\n", spikes.constData());
+    }
+}
+
 void FFmpegVideoDecoder::logVideoStats(VIDEO_STATS& stats, const char* title)
 {
     if (stats.renderedFps > 0 || stats.renderedFrames != 0) {
@@ -2016,15 +2049,26 @@ int FFmpegVideoDecoder::submitDecodeUnit(PDECODE_UNIT du)
 
     // Flip stats windows roughly every second
     if (LiGetMicroseconds() > m_ActiveWndVideoStats.measurementStartUs + 1000000) {
+        // Diagnose the just-completed one-second window and remember it so
+        // intermittent spikes stay visible after the fact (client roadmap
+        // Phase 0). The per-second window is the most sensitive to brief hitches.
+        m_SpikeHistory.record(Diagnostics::diagnose(m_ActiveWndVideoStats, m_StreamFps));
+
         // Update overlay stats if it's enabled
         if (Session::get()->getOverlayManager().isOverlayEnabled(Overlay::OverlayDebug)) {
             VIDEO_STATS lastTwoWndStats = {};
             addVideoStats(m_LastWndVideoStats, lastTwoWndStats);
             addVideoStats(m_ActiveWndVideoStats, lastTwoWndStats);
 
-            stringifyVideoStats(lastTwoWndStats,
-                                Session::get()->getOverlayManager().getOverlayText(Overlay::OverlayDebug),
-                                Session::get()->getOverlayManager().getOverlayMaxTextLength());
+            char* overlayText = Session::get()->getOverlayManager().getOverlayText(Overlay::OverlayDebug);
+            int overlayLen = Session::get()->getOverlayManager().getOverlayMaxTextLength();
+            stringifyVideoStats(lastTwoWndStats, overlayText, overlayLen);
+
+            // Append the plain-language verdict for the displayed window plus a
+            // running spike summary (roadmap items 0.2 and 0.3).
+            appendDiagnosisText(Diagnostics::diagnose(lastTwoWndStats, m_StreamFps),
+                                m_SpikeHistory, overlayText, overlayLen);
+
             Session::get()->getOverlayManager().setOverlayTextUpdated(Overlay::OverlayDebug);
         }
 

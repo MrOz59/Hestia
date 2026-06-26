@@ -6,6 +6,7 @@
 
 #include "../bandwidth.h"
 #include "decoder.h"
+#include "statsdiagnostics.h"
 #include "ffmpeg-renderers/renderer.h"
 #include "ffmpeg-renderers/pacer/pacer.h"
 
@@ -51,6 +52,10 @@ private:
                                 bool useAlternateFrontend);
 
     void stringifyVideoStats(VIDEO_STATS& stats, char* output, int length);
+
+    void appendDiagnosisText(const Diagnostics::Diagnosis& diagnosis,
+                             const Diagnostics::SpikeHistory& history,
+                             char* output, int length);
 
     void logVideoStats(VIDEO_STATS& stats, const char* title);
 
@@ -117,6 +122,7 @@ private:
     VIDEO_STATS m_ActiveWndVideoStats;
     VIDEO_STATS m_LastWndVideoStats;
     VIDEO_STATS m_GlobalVideoStats;
+    Diagnostics::SpikeHistory m_SpikeHistory;
     std::set<IFFmpegRenderer::RendererType> m_FailedRenderers;
 
     int m_FramesIn;

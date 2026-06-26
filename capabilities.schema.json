@@ -55,7 +55,7 @@
         "virtual_display": { "type": "boolean" },
         "virtual_display_backend": {
           "type": "array",
-          "items": { "enum": ["evdi"] },
+          "items": { "enum": ["evdi", "hermes_kms"] },
           "uniqueItems": true
         },
         "kde_kscreen": { "type": "boolean" },

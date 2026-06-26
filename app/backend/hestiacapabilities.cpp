@@ -198,7 +198,7 @@ bool HestiaCapabilities::fromJson(const QJsonObject& response, HestiaCapabilitie
     };
     if (!hasOnlyKeys(features, featureKeys, error, "features") ||
             !readBool(features, "virtual_display", &parsed.features.virtualDisplay, error) ||
-            !readStringArray(features, "virtual_display_backend", {"evdi"}, &parsed.features.virtualDisplayBackend, error) ||
+            !readStringArray(features, "virtual_display_backend", {"evdi", "hermes_kms"}, &parsed.features.virtualDisplayBackend, error) ||
             !readBool(features, "kde_kscreen", &parsed.features.kdeKscreen, error) ||
             !readBool(features, "display_recovery", &parsed.features.displayRecovery, error) ||
             !readBool(features, "client_resolution_matching", &parsed.features.clientResolutionMatching, error) ||

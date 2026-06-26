@@ -41,7 +41,7 @@ These already exist and the roadmap builds on them rather than reinventing:
 
 ---
 
-## Phase 0 — Telemetry foundation & diagnosis engine
+## Phase 0 — Telemetry foundation & diagnosis engine  ✅ DONE
 
 **Why first:** the single biggest desktop dor is *"stutter even when everything
 looks fine,"* and *"stats show numbers but no diagnosis."* The raw data already
@@ -49,19 +49,27 @@ exists; we just don't interpret it. This phase is **read-only over the
 pipeline** (low risk) and produces the signal every later phase needs to prove
 it helped.
 
-- **0.1 — Diagnosis classifier.** A small pure function that takes a
-  `VIDEO_STATS` window and classifies the dominant bottleneck:
-  `DECODE_BOUND` (high `totalDecodeTimeUs`/frame), `RENDER/PACING_BOUND`
-  (high pacer time or `pacerDroppedFrames`), `NETWORK_BOUND` (high
-  `networkDroppedFrames`, RTT variance), `HOST_BOUND` (host processing
-  latency). Output is one human sentence: *"Your decoder is falling behind —
-  try HEVC→H.264 or lower resolution."*
-- **0.2 — Plain-language overlay mode.** Add a second overlay style next to the
-  raw numbers: a verdict line + the one metric that drives it. Gate behind a
-  setting; keep the existing detailed overlay untouched.
-- **0.3 — Spike history ring buffer.** Keep the last N seconds of per-second
-  stats so periodic lag spikes (dor #4) are *visible after the fact*: "3 spikes
-  in the last 5 min, each ~network." Surfaced in the overlay and logged.
+Implemented in `streaming/video/statsdiagnostics.{h,cpp}`, wired into the
+per-second stats flip in `ffmpeg.cpp`.
+
+- **0.1 — Diagnosis classifier.** ✅ A pure function `Diagnostics::diagnose()`
+  takes a `VIDEO_STATS` window + target FPS and classifies the dominant
+  bottleneck by normalized severity score: `BOTTLENECK_DECODE` (decode time per
+  frame vs frame budget, or decoded-FPS shortfall), `BOTTLENECK_RENDER` (pacer
+  drops or render+vsync time), `BOTTLENECK_NETWORK` (network-dropped frames),
+  `BOTTLENECK_HOST` (host processing latency). Output is one translated sentence
+  plus the single driving metric.
+- **0.2 — Plain-language overlay.** ✅ When the debug overlay is enabled, the
+  verdict + key metric are appended beneath the existing raw numbers
+  (`appendDiagnosisText`). The detailed overlay is untouched.
+- **0.3 — Spike history ring buffer.** ✅ `Diagnostics::SpikeHistory` keeps ~5
+  min of per-second diagnoses and summarizes them ("3 spike(s) in last ~5 min
+  (mostly network)") in the overlay.
+
+Classifier logic validated standalone against synthetic windows for every
+bottleneck class (decode-heavy, decode-shortfall, network, pacing, host,
+too-few-frames, and the spike summary). Pipeline runtime validation still
+pending a working local build (Qt6 link env).
 
 **Acceptance:** with a deliberately under-powered decode setting, the overlay
 names "decode-bound"; with an artificially jittery link (tc/netem), it names
@@ -240,8 +248,9 @@ specific, correct next step.
   capabilities forward-compat) are **not** in this roadmap; it is forward-looking
   only.
 
-## Suggested first increment
+## Progress
 
-Phase **0.1 + 0.2** (diagnosis classifier + plain-language overlay). It is
-low-risk, ships visible user value immediately, and unlocks honest measurement
-for everything after it.
+- ✅ **Phase 0** — Telemetry foundation & diagnosis engine (0.1, 0.2, 0.3).
+- ⏭️ **Next: Phase 1** — Auto-config & presets. Start with **1.1** (decode
+  capability probe via the existing `testOnly` decoder path), since the presets
+  in 1.2–1.4 depend on real measured codec/resolution capability.

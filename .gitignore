@@ -39,7 +39,20 @@ app/moonlight
 *.AppImage.old
 *.lib
 
+# qmake-generated Makefiles (this project generates all of them via qmake)
+Makefile
+Makefile.Debug
+Makefile.Release
+config.tests/*/Makefile.Debug
+config.tests/*/Makefile.Release
+
+# config.tests build outputs (probe binaries/objects)
+config.tests/EGL/EGL
+config.tests/SL/SL
+
 # Qt / IDE / Editor
+*.qmake.cache
+.qmake.cache
 *.qmake.stash
 *.pro.user
 .idea/
@@ -61,3 +74,6 @@ node_modules/
 .cache/
 .pytest_cache/
 jsson-lsp.log
+*.log
+build.log
+config.log

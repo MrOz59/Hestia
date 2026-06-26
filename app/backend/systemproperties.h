@@ -2,6 +2,7 @@
 
 #include <QObject>
 #include <QRect>
+#include <QHash>
 
 #include "SDL_compat.h"
 
@@ -42,6 +43,14 @@ public:
     Q_INVOKABLE void waitForAsyncLoad();
     Q_INVOKABLE void refreshDisplays();
 
+    // Probes whether the given codec can be decoded at the given resolution and
+    // frame rate, returning "hardware", "software", or "none". Results are
+    // cached for the lifetime of the object so repeated GUI queries are cheap.
+    // codec is one of "h264", "hevc", "av1". startAsyncLoad()+waitForAsyncLoad()
+    // (or refreshDisplays()) must have run first so the test window exists.
+    Q_INVOKABLE QString probeCodecAvailability(const QString& codec, bool hdr, bool yuv444,
+                                               int width, int height, int fps);
+
 signals:
     void unmappedGamepadsChanged();
     void hasHardwareAccelerationChanged();
@@ -78,5 +87,8 @@ private:
     QList<QRect> monitorNativeResolutions;
     QList<QRect> monitorSafeAreaResolutions;
     QList<int> monitorRefreshRates;
+
+    // Cache of codec-availability probe results, keyed by the probe parameters.
+    QHash<QString, QString> codecAvailabilityCache;
 };
 

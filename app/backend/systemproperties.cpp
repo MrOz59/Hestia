@@ -159,6 +159,69 @@ int SystemProperties::getRefreshRate(int displayIndex)
     return monitorRefreshRates.value(displayIndex);
 }
 
+QString SystemProperties::probeCodecAvailability(const QString& codec, bool hdr, bool yuv444,
+                                                 int width, int height, int fps)
+{
+    const QString cacheKey = QString("%1|%2|%3|%4x%5@%6")
+            .arg(codec.toLower()).arg(hdr).arg(yuv444).arg(width).arg(height).arg(fps);
+
+    auto cached = codecAvailabilityCache.constFind(cacheKey);
+    if (cached != codecAvailabilityCache.constEnd()) {
+        return cached.value();
+    }
+
+    if (testWindow == nullptr) {
+        // No test window yet (async load not completed). Don't cache this so a
+        // later call once the window exists can probe for real.
+        return QStringLiteral("unknown");
+    }
+
+    // Map the codec name + flags to the corresponding Limelight video format,
+    // mirroring the selection logic used when building the stream's format list.
+    int videoFormat;
+    const QString lowerCodec = codec.toLower();
+    if (lowerCodec == "h264") {
+        // H.264 has no 10-bit profile; HDR is ignored here.
+        videoFormat = yuv444 ? VIDEO_FORMAT_H264_HIGH8_444 : VIDEO_FORMAT_H264;
+    }
+    else if (lowerCodec == "hevc") {
+        if (yuv444) {
+            videoFormat = hdr ? VIDEO_FORMAT_H265_REXT10_444 : VIDEO_FORMAT_H265_REXT8_444;
+        }
+        else {
+            videoFormat = hdr ? VIDEO_FORMAT_H265_MAIN10 : VIDEO_FORMAT_H265;
+        }
+    }
+    else if (lowerCodec == "av1") {
+        if (yuv444) {
+            videoFormat = hdr ? VIDEO_FORMAT_AV1_HIGH10_444 : VIDEO_FORMAT_AV1_HIGH8_444;
+        }
+        else {
+            videoFormat = hdr ? VIDEO_FORMAT_AV1_MAIN10 : VIDEO_FORMAT_AV1_MAIN8;
+        }
+    }
+    else {
+        return QStringLiteral("none");
+    }
+
+    // Probe using the user's decoder selection so a "force software" preference
+    // is reflected in the result the GUI shows.
+    StreamingPreferences* prefs = StreamingPreferences::get();
+    Session::DecoderAvailability availability =
+            Session::getDecoderAvailability(testWindow, prefs->videoDecoderSelection,
+                                            videoFormat, width, height, fps);
+
+    QString result;
+    switch (availability) {
+    case Session::DecoderAvailability::Hardware: result = QStringLiteral("hardware"); break;
+    case Session::DecoderAvailability::Software: result = QStringLiteral("software"); break;
+    default:                                     result = QStringLiteral("none");     break;
+    }
+
+    codecAvailabilityCache.insert(cacheKey, result);
+    return result;
+}
+
 void SystemProperties::startAsyncLoad()
 {
     if (systemPropertyQueryThread) {

@@ -1,0 +1,3 @@
+CONFIG += done_config_SL
+CONFIG += config_EGL
+CONFIG += done_config_EGL

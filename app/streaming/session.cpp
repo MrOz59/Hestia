@@ -39,6 +39,7 @@
 #include <QPainter>
 #include <QImage>
 #include <QGuiApplication>
+#include <QClipboard>
 #include <QCursor>
 #include <QJsonObject>
 #include <QScreen>
@@ -565,6 +566,8 @@ Session::Session(NvComputer* computer, NvApp& app, StreamingPreferences *prefere
       m_MouseEmulationRefCount(0),
       m_FlushingWindowEventsRef(0),
       m_ShouldPrepareHestiaSession(false),
+      m_LastHestiaClipboardSyncCheckMs(0),
+      m_LastHestiaClipboardText(),
       m_ShouldExit(false),
       m_AsyncConnectionSuccess(false),
       m_PortTestResults(0),
@@ -656,6 +659,43 @@ QJsonObject Session::buildHestiaSessionPrepareRequest() const
         {"virtual_display", virtualDisplay},
         {"app", app},
     };
+}
+
+void Session::pollHestiaClipboardSync()
+{
+    if (!m_Preferences->hestiaClipboardSync ||
+            !m_Computer->hestiaCapabilities.supportsProtocolV1 ||
+            !m_Computer->hestiaCapabilities.features.clipboardSync) {
+        return;
+    }
+
+    const Uint32 now = SDL_GetTicks();
+    if (now - m_LastHestiaClipboardSyncCheckMs < 1000) {
+        return;
+    }
+    m_LastHestiaClipboardSyncCheckMs = now;
+
+    QClipboard* clipboard = QGuiApplication::clipboard();
+    if (clipboard == nullptr) {
+        return;
+    }
+
+    const QString text = clipboard->text(QClipboard::Clipboard);
+    if (text == m_LastHestiaClipboardText ||
+            text.contains(QChar::Null) ||
+            text.toUtf8().size() > 64 * 1024) {
+        return;
+    }
+
+    m_LastHestiaClipboardText = text;
+
+    if (m_HestiaClipboardHttp.isNull()) {
+        m_HestiaClipboardHttp.reset(new NvHTTP(m_Computer));
+    }
+    if (!m_HestiaClipboardHttp->setHestiaClipboard(text)) {
+        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+                    "Failed to sync local clipboard text to Hermes");
+    }
 }
 
 bool Session::initialize(QQuickWindow* qtWindow)
@@ -1017,6 +1057,10 @@ bool Session::initialize(QQuickWindow* qtWindow)
     if (!ret) {
         SDL_QuitSubSystem(SDL_INIT_VIDEO);
         return false;
+    }
+
+    if (m_Computer->hestiaCapabilities.supportsProtocolV1 && m_StreamConfig.fps < 60) {
+        emitLaunchWarning(tr("This stream is configured for %1 FPS. For smoother mouse input in games, use 60 FPS or higher in Hestia's video settings.").arg(m_StreamConfig.fps));
     }
 
     if (m_Computer->hestiaCapabilities.supportsProtocolV1) {
@@ -2054,6 +2098,7 @@ void Session::exec()
         // and other problems.
         if (!SDL_WaitEventTimeout(&event, 1000)) {
             presence.runCallbacks();
+            pollHestiaClipboardSync();
             continue;
         }
 #else
@@ -2070,9 +2115,12 @@ void Session::exec()
             SDL_Delay(10);
 #endif
             presence.runCallbacks();
+            pollHestiaClipboardSync();
             continue;
         }
 #endif
+
+        pollHestiaClipboardSync();
         switch (event.type) {
         case SDL_QUIT:
             SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,

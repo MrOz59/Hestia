@@ -23,6 +23,7 @@
 #define QUIT_TIMEOUT_MS 30000
 #define HESTIA_CAPABILITIES_TIMEOUT_MS 2000
 #define HESTIA_SESSION_PREPARE_TIMEOUT_MS 5000
+#define HESTIA_CLIPBOARD_TIMEOUT_MS 1000
 
 #if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
 #define XML_NAME_EQUALS(x, y) ((x) == (y))
@@ -612,7 +613,7 @@ bool NvHTTP::getHestiaClipboard(QString* text)
     auto sslErrorsConnection = connect(m_Nam, &QNetworkAccessManager::sslErrors, this, &NvHTTP::handleSslErrors);
     QNetworkReply* reply = m_Nam->get(request);
     QEventLoop loop;
-    QTimer::singleShot(HESTIA_SESSION_PREPARE_TIMEOUT_MS, &loop, &QEventLoop::quit);
+    QTimer::singleShot(HESTIA_CLIPBOARD_TIMEOUT_MS, &loop, &QEventLoop::quit);
     connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
     loop.exec(QEventLoop::ExcludeUserInputEvents);
     disconnect(sslErrorsConnection);
@@ -650,7 +651,7 @@ bool NvHTTP::setHestiaClipboard(const QString& text)
     auto sslErrorsConnection = connect(m_Nam, &QNetworkAccessManager::sslErrors, this, &NvHTTP::handleSslErrors);
     QNetworkReply* reply = m_Nam->post(request, QJsonDocument(QJsonObject {{"text", text}}).toJson(QJsonDocument::Compact));
     QEventLoop loop;
-    QTimer::singleShot(HESTIA_SESSION_PREPARE_TIMEOUT_MS, &loop, &QEventLoop::quit);
+    QTimer::singleShot(HESTIA_CLIPBOARD_TIMEOUT_MS, &loop, &QEventLoop::quit);
     connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
     loop.exec(QEventLoop::ExcludeUserInputEvents);
     disconnect(sslErrorsConnection);

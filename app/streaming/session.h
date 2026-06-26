@@ -3,6 +3,8 @@
 #include <QSemaphore>
 #include <QJsonObject>
 #include <QQuickWindow>
+#include <QString>
+#include <QScopedPointer>
 
 #include <Limelight.h>
 #include <opus_multistream.h>
@@ -155,6 +157,8 @@ private:
 
     void emitLaunchWarning(QString text);
 
+    void pollHestiaClipboardSync();
+
     bool populateDecoderProperties(SDL_Window* window);
 
     IAudioRenderer* createAudioRenderer(const POPUS_MULTISTREAM_CONFIGURATION opusConfig);
@@ -267,6 +271,9 @@ private:
     QStringList m_LaunchWarnings;
     QJsonObject m_HestiaSessionPrepareRequest;
     bool m_ShouldPrepareHestiaSession;
+    Uint32 m_LastHestiaClipboardSyncCheckMs;
+    QString m_LastHestiaClipboardText;
+    QScopedPointer<NvHTTP> m_HestiaClipboardHttp;
     bool m_ShouldExit;
 
     bool m_AsyncConnectionSuccess;

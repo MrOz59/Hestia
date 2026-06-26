@@ -1679,7 +1679,7 @@ Flickable {
                     onCheckedChanged: StreamingPreferences.hestiaClipboardSync = checked
                     ToolTip.delay: 1000
                     ToolTip.visible: hovered
-                    ToolTip.text: qsTr("Clipboard access is manual, text-only, and requires paired-host permission.")
+                    ToolTip.text: qsTr("Automatically sends local text clipboard changes to active Hermes streams. Host clipboard paste remains available from the PC menu. Requires paired-host permission.")
                 }
 
                 Label {

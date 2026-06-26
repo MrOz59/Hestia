@@ -259,7 +259,8 @@ void PairCommandLineParser::parse(const QStringList &args)
     );
     parser.addPositionalArgument("pair", "pair host");
     parser.addPositionalArgument("host", "Host computer name, UUID, or IP address", "<host>");
-    parser.addValueOption("pin", "4 digit pairing PIN");
+    parser.addValueOption("pin", "pairing PIN (4 digits, or the host code for OTP pairing)");
+    parser.addValueOption("passphrase", "passphrase for Apollo/Hermes host-initiated (OTP) pairing");
 
     if (!parser.parse(args)) {
         parser.showError(parser.errorText());
@@ -278,7 +279,12 @@ void PairCommandLineParser::parse(const QStringList &args)
     }
     m_Host = parser.positionalArguments().at(1);
     m_PredefinedPin = parser.value("pin");
-    if (!m_PredefinedPin.isEmpty() && m_PredefinedPin.length() != 4) {
+    m_OtpPassphrase = parser.value("passphrase");
+
+    // A 4-digit PIN is required for the standard pairing flow. OTP pairing uses
+    // a host-generated code paired with a passphrase, so the 4-digit rule only
+    // applies when no passphrase was supplied.
+    if (!m_PredefinedPin.isEmpty() && m_OtpPassphrase.isEmpty() && m_PredefinedPin.length() != 4) {
         parser.showError("PIN must be 4 digits");
     }
 }
@@ -291,6 +297,11 @@ QString PairCommandLineParser::getHost() const
 QString PairCommandLineParser::getPredefinedPin() const
 {
     return m_PredefinedPin;
+}
+
+QString PairCommandLineParser::getOtpPassphrase() const
+{
+    return m_OtpPassphrase;
 }
 
 StreamCommandLineParser::StreamCommandLineParser()

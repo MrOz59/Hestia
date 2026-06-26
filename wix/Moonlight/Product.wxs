@@ -94,6 +94,24 @@
                                   Name="$(var.FullName)" />
         </File>
       </Component>
+
+      <!-- Register the deeplink URL protocol handlers (hestia:// and moonlight://) -->
+      <Component Id="MoonlightUrlSchemeHestia" Guid="*">
+        <RegistryKey Root="HKCR" Key="hestia">
+          <RegistryValue Type="string" Value="URL:Hestia Protocol" />
+          <RegistryValue Name="URL Protocol" Type="string" Value="" />
+          <RegistryValue Key="DefaultIcon" Type="string" Value="[INSTALLFOLDER]Moonlight.exe,0" />
+          <RegistryValue Key="shell\open\command" Type="string" Value="&quot;[INSTALLFOLDER]Moonlight.exe&quot; &quot;%1&quot;" />
+        </RegistryKey>
+      </Component>
+      <Component Id="MoonlightUrlSchemeMoonlight" Guid="*">
+        <RegistryKey Root="HKCR" Key="moonlight">
+          <RegistryValue Type="string" Value="URL:Moonlight Protocol" />
+          <RegistryValue Name="URL Protocol" Type="string" Value="" />
+          <RegistryValue Key="DefaultIcon" Type="string" Value="[INSTALLFOLDER]Moonlight.exe,0" />
+          <RegistryValue Key="shell\open\command" Type="string" Value="&quot;[INSTALLFOLDER]Moonlight.exe&quot; &quot;%1&quot;" />
+        </RegistryKey>
+      </Component>
     </DirectoryRef>
 
     <ComponentGroup Id="MoonlightDependencies" Directory="INSTALLFOLDER">
@@ -102,6 +120,8 @@
 
     <Feature Id="ProductFeature" Title="Moonlight" Level="1" ConfigurableDirectory="INSTALLFOLDER">
       <ComponentRef Id="Moonlight" />
+      <ComponentRef Id="MoonlightUrlSchemeHestia" />
+      <ComponentRef Id="MoonlightUrlSchemeMoonlight" />
       <ComponentRef Id="MoonlightShortcuts" />
       <ComponentRef Id="MoonlightDesktopShortcutState" />
       <ComponentRef Id="MoonlightDesktopShortcut" />

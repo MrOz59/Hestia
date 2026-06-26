@@ -50,5 +50,17 @@
 	<string>Moonlight</string>
     <key>LSApplicationCategoryType</key>
 	<string>public.app-category.games</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.moonlight-stream.Moonlight.deeplink</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>hestia</string>
+				<string>moonlight</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>

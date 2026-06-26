@@ -57,8 +57,10 @@ public:
                 q->connect(m_ComputerManager, &ComputerManager::pairingCompleted,
                            q, &Launcher::onPairingCompleted);
 
-                // If we weren't provided a predefined PIN, generate one now
-                if (m_PredefinedPin.isEmpty()) {
+                // If we weren't provided a predefined PIN, generate one now.
+                // OTP (host-initiated) pairing always supplies the host code as
+                // the PIN, so we never auto-generate one in that case.
+                if (m_PredefinedPin.isEmpty() && m_OtpPassphrase.isEmpty()) {
                     m_PredefinedPin = m_ComputerManager->generatePinString();
                 }
 
@@ -81,10 +83,10 @@ public:
                     emit q->failed(msg);
                 }
                 else {
-                    Q_ASSERT(!m_PredefinedPin.isEmpty());
+                    Q_ASSERT(!m_PredefinedPin.isEmpty() || !m_OtpPassphrase.isEmpty());
 
                     m_State = StatePairing;
-                    m_ComputerManager->pairHost(event.computer, m_PredefinedPin);
+                    m_ComputerManager->pairHost(event.computer, m_PredefinedPin, m_OtpPassphrase);
                     emit q->pairing(event.computer->name, m_PredefinedPin);
                 }
             }
@@ -115,6 +117,7 @@ public:
     Launcher *q_ptr;
     QString m_ComputerName;
     QString m_PredefinedPin;
+    QString m_OtpPassphrase;
     ComputerManager *m_ComputerManager;
     ComputerSeeker *m_ComputerSeeker;
     NvComputer *m_Computer;
@@ -122,13 +125,14 @@ public:
     QTimer *m_TimeoutTimer;
 };
 
-Launcher::Launcher(QString computer, QString predefinedPin, QObject *parent)
+Launcher::Launcher(QString computer, QString predefinedPin, QString otpPassphrase, QObject *parent)
     : QObject(parent),
       m_DPtr(new LauncherPrivate(this))
 {
     Q_D(Launcher);
     d->m_ComputerName = computer;
     d->m_PredefinedPin = predefinedPin;
+    d->m_OtpPassphrase = otpPassphrase;
     d->m_State = StateInit;
     d->m_TimeoutTimer = new QTimer(this);
     d->m_TimeoutTimer->setSingleShot(true);

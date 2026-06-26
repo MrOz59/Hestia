@@ -180,6 +180,7 @@ SOURCES += \
     backend/boxartmanager.cpp \
     backend/richpresencemanager.cpp \
     cli/commandlineparser.cpp \
+    cli/deeplinkparser.cpp \
     cli/listapps.cpp \
     cli/quitstream.cpp \
     cli/startstream.cpp \
@@ -225,6 +226,7 @@ HEADERS += \
     backend/boxartmanager.h \
     backend/richpresencemanager.h \
     cli/commandlineparser.h \
+    cli/deeplinkparser.h \
     cli/listapps.h \
     cli/quitstream.h \
     cli/startstream.h \

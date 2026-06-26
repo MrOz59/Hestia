@@ -44,6 +44,13 @@
 #include "cli/startstream.h"
 #include "cli/pair.h"
 #include "cli/commandlineparser.h"
+#include "cli/deeplinkparser.h"
+
+#ifdef Q_OS_DARWIN
+#include <QFileOpenEvent>
+#include <QUrl>
+#include <QEvent>
+#endif
 #include "path.h"
 #include "utils.h"
 #include "gui/computermodel.h"
@@ -759,6 +766,45 @@ int main(int argc, char *argv[])
 
     QGuiApplication app(argc, argv);
 
+    QStringList launchArgs = app.arguments();
+
+#ifdef Q_OS_DARWIN
+    // On macOS, a deeplink launch is delivered as a QFileOpenEvent rather than a
+    // command-line argument. Capture an event posted during startup and fold its
+    // URL into the argument list so the normal dispatch path can handle it.
+    {
+        class FileOpenEventFilter : public QObject
+        {
+        public:
+            bool eventFilter(QObject* obj, QEvent* event) override
+            {
+                if (event->type() == QEvent::FileOpen) {
+                    QUrl url = static_cast<QFileOpenEvent*>(event)->url();
+                    if (DeepLinkParser::isDeepLink(url.toString())) {
+                        m_Url = url.toString();
+                        return true;
+                    }
+                }
+                return QObject::eventFilter(obj, event);
+            }
+            QString m_Url;
+        } filter;
+
+        app.installEventFilter(&filter);
+        app.processEvents();
+        app.removeEventFilter(&filter);
+
+        if (!filter.m_Url.isEmpty()) {
+            launchArgs = QStringList{ launchArgs.value(0), filter.m_Url };
+        }
+    }
+#endif
+
+    // Translate a "hestia://" / "moonlight://" deeplink (passed by the OS as a
+    // launch argument) into the equivalent CLI invocation. If no deeplink is
+    // present, this returns the original arguments unchanged.
+    const QStringList cmdArgs = DeepLinkParser::rewriteArguments(launchArgs);
+
 #ifdef Q_OS_DARWIN
     // macOS defaults "Keyboard navigation" to text fields and lists only, which
     // prevents Tab (and the gamepad navigation that synthesizes it) from moving
@@ -808,7 +854,7 @@ int main(int argc, char *argv[])
 #endif
 
     GlobalCommandLineParser parser;
-    GlobalCommandLineParser::ParseResult commandLineParserResult = parser.parse(app.arguments());
+    GlobalCommandLineParser::ParseResult commandLineParserResult = parser.parse(cmdArgs);
     switch (commandLineParserResult) {
     case GlobalCommandLineParser::ListRequested:
         // Don't log to the console since it will jumble the command output
@@ -1000,7 +1046,7 @@ int main(int argc, char *argv[])
             initialView = "qrc:/gui/CliStartStreamSegue.qml";
             StreamingPreferences* preferences = StreamingPreferences::get();
             StreamCommandLineParser streamParser;
-            streamParser.parse(app.arguments(), preferences);
+            streamParser.parse(cmdArgs, preferences);
             QString host    = streamParser.getHost();
             QString appName = streamParser.getAppName();
             auto launcher   = new CliStartStream::Launcher(host, appName, preferences, &app);
@@ -1011,7 +1057,7 @@ int main(int argc, char *argv[])
         {
             initialView = "qrc:/gui/CliQuitStreamSegue.qml";
             QuitCommandLineParser quitParser;
-            quitParser.parse(app.arguments());
+            quitParser.parse(cmdArgs);
             auto launcher = new CliQuitStream::Launcher(quitParser.getHost(), &app);
             engine.rootContext()->setContextProperty("launcher", launcher);
             break;
@@ -1020,15 +1066,15 @@ int main(int argc, char *argv[])
         {
             initialView = "qrc:/gui/CliPair.qml";
             PairCommandLineParser pairParser;
-            pairParser.parse(app.arguments());
-            auto launcher = new CliPair::Launcher(pairParser.getHost(), pairParser.getPredefinedPin(), &app);
+            pairParser.parse(cmdArgs);
+            auto launcher = new CliPair::Launcher(pairParser.getHost(), pairParser.getPredefinedPin(), pairParser.getOtpPassphrase(), &app);
             engine.rootContext()->setContextProperty("launcher", launcher);
             break;
         }
     case GlobalCommandLineParser::ListRequested:
         {
             ListCommandLineParser listParser;
-            listParser.parse(app.arguments());
+            listParser.parse(cmdArgs);
             auto launcher = new CliListApps::Launcher(listParser.getHost(), listParser, &app);
             launcher->execute(new ComputerManager(StreamingPreferences::get()));
             hasGUI = false;

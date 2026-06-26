@@ -79,24 +79,37 @@ names "decode-bound"; with an artificially jittery link (tc/netem), it names
 
 ---
 
-## Phase 1 — Auto-config & presets (Fast / Balanced / Quality / Battery)
+## Phase 1 — Auto-config & presets (Fast / Balanced / Quality / Battery)  🔶 PARTIAL
 
 **Why second:** *"manual config of bitrate/resolution/FPS/codec is confusing"*
 and *"no presets."* Depends on Phase 0 to validate that a chosen preset actually
 behaves, and on a one-time decode probe.
 
-- **1.1 — Decode capability probe.** Reuse the existing `testOnly` decoder path
-  (`DECODER_PARAMETERS.testOnly`) to actually measure, not guess, whether
-  HEVC/AV1 hardware-decode this device at the target res/fps — covering dor #14
-  ("device claims codec support but performs badly").
-- **1.2 — Presets.** Fast / Balanced / Quality mapped to concrete
-  res/fps/codec/bitrate, seeded by the probe + Hermes `limits` when present.
-- **1.3 — Handheld power profile.** "Battery saver" preset for Linux handhelds:
-  cap fps/res/bitrate and prefer the codec with the lowest measured *decode*
-  cost (not the lowest bitrate), since on a weak decoder HEVC/AV1 can cost more
-  power than H.264 (dor #15). Desktop builds may hide this preset.
-- **1.4 — Per-device profile memory.** Persist the chosen preset/probe result
-  keyed by machine, so a laptop and a Deck remember different sweet spots.
+- **1.1 — Decode capability probe.** ✅ `SystemProperties.probeCodecAvailability`
+  reuses the existing `testOnly` decoder path via `Session::getDecoderAvailability`
+  to report "hardware"/"software"/"none" per codec at the target res/fps, cached
+  per parameter set. NB: this is a *capability* probe (does HW decode initialize),
+  not a sustained-FPS benchmark — the embedded test frame is a single fixed-size
+  frame, so true throughput at 4K/120 can't be measured cheaply. The HW-vs-SW
+  signal already covers most of dor #14 ("claims support but performs badly" ≈
+  silently falls back to software).
+- **1.2 — Presets.** ✅ A "Quality preset" selector (Fast / Balanced / Quality /
+  Battery Saver / Custom) in video settings. `StreamingPreferences::applyPreset`
+  derives res/fps from the native display mode and bitrate from
+  `getDefaultBitrate` scaled per preset; the GUI picks the best HW-decodable
+  codec via the 1.1 probe. Reverts to "Custom" on any manual edit. (Hermes
+  `limits` not yet consulted — see below.)
+- **1.3 — Handheld power profile.** 🔶 The "Battery Saver" preset exists (720p30,
+  reduced bitrate). Not yet done: preferring the lowest-*decode-cost* codec
+  (we can't measure decode cost cheaply, see 1.1), and hiding the preset on
+  non-handheld desktop builds.
+- **1.4 — Per-device profile memory.** ⬜ Not started. Persist the chosen
+  preset/probe result keyed by machine, so a laptop and a Deck remember
+  different sweet spots.
+
+Preset resolution/fps/bitrate math validated standalone across 4K/120, 1080p60,
+Steam Deck 1280x800/90, and 1440p/144. Runtime validation of the GUI flow still
+pending a working local build (Qt6 link env).
 
 **Acceptance:** fresh install → one preset click yields a stream Phase 0 rates
 as healthy; the probe correctly rejects a codec that software-falls-back.
@@ -251,6 +264,10 @@ specific, correct next step.
 ## Progress
 
 - ✅ **Phase 0** — Telemetry foundation & diagnosis engine (0.1, 0.2, 0.3).
-- ⏭️ **Next: Phase 1** — Auto-config & presets. Start with **1.1** (decode
-  capability probe via the existing `testOnly` decoder path), since the presets
-  in 1.2–1.4 depend on real measured codec/resolution capability.
+- 🔶 **Phase 1** — Auto-config & presets. Done: 1.1 (capability probe), 1.2
+  (preset selector), 1.3 partial (Battery preset). Remaining: 1.4 (per-device
+  profile memory), Hermes `limits` as a preset ceiling, and hiding the battery
+  preset on non-handheld builds.
+- ⏭️ **Next:** either finish Phase 1 (1.4 + Hermes limits) or move to **Phase 2**
+  (frame pacing) — the first deep-pipeline phase, which really wants a working
+  runtime to validate.

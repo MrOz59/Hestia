@@ -126,9 +126,15 @@ latency,"* *"doesn't sync to refresh,"* *"problems on 90/120/144 Hz and
 fractional refresh."* High value, but it touches sensitive shared code, so it
 goes after we have Phase 0 to measure regressions objectively.
 
-- **2.1 — Fractional / high-refresh handling.** Audit pacer vsync sources for
-  fractional refresh (59.94, 119.88) and high-Hz panels; ensure target interval
-  is derived from the *actual* display mode, not a rounded integer.
+- **2.1 — Fractional / high-refresh handling.** ✅ The pacer no longer paces off
+  a rounded integer refresh rate. `StreamUtils::getDisplayRefreshRateMillihertz`
+  reconstructs the NTSC-derived fractional rates SDL2 truncates (59.94, 119.88,
+  …) and the pacer carries `m_DisplayFpsMillihz`: the vsync interval is computed
+  in microseconds from it, and the "stream ≥ display" drop decision compares in
+  millihertz so a 120 FPS stream on a 119.88 Hz panel isn't misclassified into
+  the aggressive drop path. (SDL2 exposes only an integer rate, so non-NTSC
+  fractional modes still fall back to the integer value — SDL3 would remove that
+  limit.) Validated by compile; frame-time validation pending a runtime.
 - **2.2 — Frame-queue depth tuning.** Investigate the "smooth for 10s then a
   hitch" pattern (dor #2): is the queue holding a frame too long? Make depth
   adaptive to measured jitter rather than fixed.

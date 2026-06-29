@@ -38,6 +38,7 @@ Pacer::Pacer(IFFmpegRenderer* renderer, PVIDEO_STATS videoStats) :
     m_VsyncRenderer(renderer),
     m_MaxVideoFps(0),
     m_DisplayFps(0),
+    m_DisplayFpsMillihz(0),
     m_VideoStats(videoStats)
 {
 
@@ -128,7 +129,10 @@ int Pacer::vsyncThread(void *context)
             break;
         }
 
-        me->handleVsync(1000 / me->m_DisplayFps);
+        // Microseconds per frame from the precise (fractional) display rate:
+        // 1e9 / millihertz. Keeps 59.94/119.88 Hz panels from drifting versus a
+        // rounded integer interval.
+        me->handleVsync((int)(1000000000LL / me->m_DisplayFpsMillihz));
     }
 
     return 0;
@@ -198,8 +202,12 @@ void Pacer::enqueueFrameForRenderingAndUnlock(AVFrame *frame)
 
 // Called in an arbitrary thread by the IVsyncSource on V-sync
 // or an event synchronized with V-sync
-void Pacer::handleVsync(int timeUntilNextVsyncMillis)
+void Pacer::handleVsync(int timeUntilNextVsyncMicros)
 {
+    // The wait below is millisecond-granular; convert from the microsecond
+    // interval here so the caller can pass a precise (fractional-Hz) value.
+    int timeUntilNextVsyncMillis = timeUntilNextVsyncMicros / 1000;
+
     // Make sure initialize() has been called
     SDL_assert(m_MaxVideoFps != 0);
 
@@ -211,8 +219,10 @@ void Pacer::handleVsync(int timeUntilNextVsyncMillis)
 
     // If we may get more frames per second than we can display, use
     // frame history to drop frames only if consistently above the
-    // one queued frame mark.
-    if (m_MaxVideoFps >= m_DisplayFps) {
+    // one queued frame mark. Compare in millihertz so a fractional panel
+    // (e.g. 120 FPS stream on a 119.88 Hz display) isn't misclassified by the
+    // integer refresh rate, which would trigger the aggressive drop path.
+    if ((int64_t)m_MaxVideoFps * 1000 >= m_DisplayFpsMillihz) {
         for (int queueHistoryEntry : std::as_const(m_PacingQueueHistory)) {
             if (queueHistoryEntry <= 1) {
                 // Be lenient as long as the queue length
@@ -263,6 +273,7 @@ bool Pacer::initialize(SDL_Window* window, int maxVideoFps, bool enablePacing)
 {
     m_MaxVideoFps = maxVideoFps;
     m_DisplayFps = StreamUtils::getDisplayRefreshRate(window);
+    m_DisplayFpsMillihz = StreamUtils::getDisplayRefreshRateMillihertz(window);
     m_RendererAttributes = m_VsyncRenderer->getRendererAttributes();
 
     if (enablePacing) {

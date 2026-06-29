@@ -99,13 +99,18 @@ behaves, and on a one-time decode probe.
   `getDefaultBitrate` scaled per preset; the GUI picks the best HW-decodable
   codec via the 1.1 probe. Reverts to "Custom" on any manual edit. (Hermes
   `limits` not yet consulted — see below.)
-- **1.3 — Handheld power profile.** 🔶 The "Battery Saver" preset exists (720p30,
-  reduced bitrate). Not yet done: preferring the lowest-*decode-cost* codec
-  (we can't measure decode cost cheaply, see 1.1), and hiding the preset on
-  non-handheld desktop builds.
-- **1.4 — Per-device profile memory.** ⬜ Not started. Persist the chosen
-  preset/probe result keyed by machine, so a laptop and a Deck remember
-  different sweet spots.
+- **1.3 — Handheld power profile.** ✅ The "Battery Saver" preset (720p30,
+  reduced bitrate) is now hidden on non-handheld builds: `SystemProperties`
+  exposes `isHandheld` (Steam Deck DMI `Jupiter`/`Galileo`, the `SteamDeck` env
+  var, or a tablet/convertible/detachable SMBIOS chassis type), and the preset
+  selector drops the Battery row unless `isHandheld`. Out of scope: preferring
+  the lowest-*decode-cost* codec — decode cost can't be measured cheaply (1.1).
+- **1.4 — Per-device profile memory.** ✅ The active preset is persisted keyed
+  by a stable machine id (`QSysInfo::machineUniqueId`, SHA-1 hashed; host-name
+  fallback) under `presetProfiles/<machineId>`. `StreamingPreferences`
+  exposes `saveActivePreset`/`loadActivePreset`; the settings view restores the
+  machine's last preset on open, saves on change, and clears to Custom on any
+  manual edit. A laptop and a Deck remember different choices.
 
 Preset resolution/fps/bitrate math validated standalone across 4K/120, 1080p60,
 Steam Deck 1280x800/90, and 1440p/144. Runtime validation of the GUI flow still
@@ -271,9 +276,8 @@ specific, correct next step.
 
 - ✅ **Phase 0** — Telemetry foundation & diagnosis engine (0.1, 0.2, 0.3).
 - 🔶 **Phase 1** — Auto-config & presets. Done: 1.1 (capability probe), 1.2
-  (preset selector), 1.3 partial (Battery preset). Remaining: 1.4 (per-device
-  profile memory), Hermes `limits` as a preset ceiling, and hiding the battery
-  preset on non-handheld builds.
-- ⏭️ **Next:** either finish Phase 1 (1.4 + Hermes limits) or move to **Phase 2**
-  (frame pacing) — the first deep-pipeline phase, which really wants a working
-  runtime to validate.
+  (preset selector), 1.3 (handheld-gated Battery preset), 1.4 (per-device
+  preset memory). Remaining: consulting Hermes `limits` as a preset ceiling.
+- ⏭️ **Next:** wire Hermes `limits` into preset clamping to close Phase 1, or
+  move to **Phase 2** (frame pacing) — the first deep-pipeline phase, which
+  really wants a working runtime to validate.

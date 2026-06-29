@@ -2,6 +2,8 @@
 #include "utils.h"
 
 #include <QSettings>
+#include <QSysInfo>
+#include <QCryptographicHash>
 #include <QTranslator>
 #include <QCoreApplication>
 #include <QLocale>
@@ -55,6 +57,8 @@
 #define SER_CAPTURESYSKEYS "capturesyskeys"
 #define SER_KEEPAWAKE "keepawake"
 #define SER_LANGUAGE "language"
+#define SER_PRESET_PROFILES "presetProfiles"
+#define SER_PRESET_ACTIVE "activePreset"
 
 #define CURRENT_DEFAULT_VER 2
 
@@ -498,4 +502,46 @@ void StreamingPreferences::applyPreset(StreamingPreset preset, int nativeWidth, 
 
     emit displayModeChanged();
     emit bitrateChanged();
+}
+
+// A stable, filesystem/registry-safe identifier for this machine. Used to key
+// per-device preset memory so different machines don't clobber each other.
+static QString machineKey()
+{
+    QByteArray id = QSysInfo::machineUniqueId();
+    if (id.isEmpty()) {
+        // Not all platforms provide a unique id; fall back to the host name.
+        id = QSysInfo::machineHostName().toUtf8();
+    }
+    if (id.isEmpty()) {
+        return QStringLiteral("default");
+    }
+    // Hash so the key is a fixed, safe length regardless of the raw id format.
+    return QString::fromLatin1(
+        QCryptographicHash::hash(id, QCryptographicHash::Sha1).toHex());
+}
+
+void StreamingPreferences::saveActivePreset(StreamingPreset preset)
+{
+    QSettings settings;
+    settings.beginGroup(SER_PRESET_PROFILES);
+    settings.beginGroup(machineKey());
+    settings.setValue(SER_PRESET_ACTIVE, static_cast<int>(preset));
+    settings.endGroup();
+    settings.endGroup();
+}
+
+StreamingPreferences::StreamingPreset StreamingPreferences::loadActivePreset()
+{
+    QSettings settings;
+    settings.beginGroup(SER_PRESET_PROFILES);
+    settings.beginGroup(machineKey());
+    int value = settings.value(SER_PRESET_ACTIVE, static_cast<int>(PRESET_CUSTOM)).toInt();
+    settings.endGroup();
+    settings.endGroup();
+
+    if (value < PRESET_CUSTOM || value > PRESET_BATTERY) {
+        return PRESET_CUSTOM;
+    }
+    return static_cast<StreamingPreset>(value);
 }

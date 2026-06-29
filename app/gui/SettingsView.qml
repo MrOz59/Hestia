@@ -136,16 +136,38 @@ Flickable {
                         ListElement { text: qsTr("Battery Saver"); val: 4 }// PRESET_BATTERY
                     }
 
+                    // Returns the model row index for a preset enum value, or 0
+                    // (Custom) if it isn't present (e.g. Battery on a desktop).
+                    function indexForPreset(preset) {
+                        for (var i = 0; i < presetListModel.count; i++) {
+                            if (presetListModel.get(i).val === preset) {
+                                return i
+                            }
+                        }
+                        return 0
+                    }
+
                     Component.onCompleted: {
-                        // No preset is active until the user picks one; manual edits
-                        // elsewhere are reflected as "Custom".
-                        currentIndex = 0
+                        // The Battery Saver preset only makes sense on handhelds;
+                        // hide it elsewhere so it doesn't clutter the desktop UI.
+                        if (!SystemProperties.isHandheld) {
+                            presetListModel.remove(indexForPreset(4 /* PRESET_BATTERY */))
+                        }
+
+                        // Restore the preset this machine last used (Phase 1.4).
+                        // Manual edits elsewhere are still reflected as "Custom".
+                        currentIndex = indexForPreset(StreamingPreferences.loadActivePreset())
                     }
 
                     // Called by the video controls when the user changes a value
                     // by hand, so the preset selector stops claiming a preset.
                     function markCustom() {
-                        currentIndex = 0
+                        if (currentIndex !== 0) {
+                            currentIndex = 0
+                            // A manual edit means this machine is no longer on a
+                            // preset; don't restore the old one next time (1.4).
+                            StreamingPreferences.saveActivePreset(StreamingPreferences.PRESET_CUSTOM)
+                        }
                     }
 
                     // Picks the best codec that has hardware decode for the target
@@ -169,6 +191,11 @@ Flickable {
 
                     onActivated: {
                         var preset = presetListModel.get(currentIndex).val
+
+                        // Remember this machine's preset choice (Phase 1.4),
+                        // including an explicit switch back to Custom.
+                        StreamingPreferences.saveActivePreset(preset)
+
                         if (preset === 0 /* PRESET_CUSTOM */) {
                             return
                         }

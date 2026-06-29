@@ -3,6 +3,8 @@
 
 #include <QGuiApplication>
 #include <QLibraryInfo>
+#include <QByteArray>
+#include <QFile>
 
 #include "streaming/session.h"
 #include "streaming/streamutils.h"
@@ -43,6 +45,43 @@ private:
 private:
     SystemProperties* m_Properties;
 };
+
+// Best-effort detection of a handheld gaming device (Steam Deck and similar).
+// Used to surface handheld-oriented options (e.g. the Battery Saver preset)
+// only where they make sense. Conservative: unknown platforms return false.
+static bool detectHandheld()
+{
+    // Steam exports this on Deck and on third-party handhelds running its OS image.
+    if (qEnvironmentVariableIntValue("SteamDeck") == 1) {
+        return true;
+    }
+
+#ifdef Q_OS_LINUX
+    auto readDmi = [](const char* path) -> QByteArray {
+        QFile f(QString::fromLatin1(path));
+        if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            return {};
+        }
+        return f.readAll().trimmed();
+    };
+
+    // Steam Deck DMI product names: LCD model is "Jupiter", OLED is "Galileo".
+    const QByteArray product = readDmi("/sys/class/dmi/id/product_name").toLower();
+    if (product == "jupiter" || product == "galileo") {
+        return true;
+    }
+
+    // Generic chassis-type signal from SMBIOS. 30=Tablet, 31=Convertible,
+    // 32=Detachable are the form factors used by handheld PCs.
+    bool ok = false;
+    const int chassis = readDmi("/sys/class/dmi/id/chassis_type").toInt(&ok);
+    if (ok && (chassis == 30 || chassis == 31 || chassis == 32)) {
+        return true;
+    }
+#endif
+
+    return false;
+}
 
 SystemProperties::SystemProperties()
 {
@@ -90,6 +129,8 @@ SystemProperties::SystemProperties()
 
     // Assume we can probably launch a browser if we're in a GUI environment
     hasBrowser = hasDesktopEnvironment;
+
+    isHandheld = detectHandheld();
 
 #ifdef HAVE_DISCORD
     hasDiscordIntegration = true;

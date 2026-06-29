@@ -32,6 +32,13 @@ public:
     // GUI so it can consult the capability probe. Does nothing for PRESET_CUSTOM.
     Q_INVOKABLE void applyPreset(StreamingPreset preset, int nativeWidth, int nativeHeight, int nativeFps);
 
+    // Per-device preset memory (roadmap Phase 1.4). The active preset is stored
+    // keyed by a stable machine id, so different machines (e.g. a desktop and a
+    // handheld) each remember their own preset choice. loadActivePreset()
+    // returns PRESET_CUSTOM when this machine has no stored preset.
+    Q_INVOKABLE void saveActivePreset(StreamingPreset preset);
+    Q_INVOKABLE StreamingPreset loadActivePreset();
+
     Q_INVOKABLE void save();
 
     void reload();

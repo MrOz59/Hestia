@@ -5,7 +5,8 @@
 # release tarball, so CI packages exactly the committed source (submodules
 # included). The installed binary is `moonlight`, matching the qmake target.
 pkgname=hestia
-pkgver=6.1.0
+# Keep in sync with app/version.txt (the client's single source of version).
+pkgver=0.1.0
 pkgrel=1
 pkgdesc="Moonlight-Qt based desktop client focused on Hermes/Apollo/Sunshine hosts"
 arch=('x86_64')

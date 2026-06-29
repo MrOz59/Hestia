@@ -72,9 +72,18 @@ jobs:
           test -x app/moonlight || { echo "::error::app/moonlight was not built"; exit 1; }
           file app/moonlight
 
+      - name: Stage a versioned tarball
+        run: |
+          VERSION="$(cat app/version.txt)"
+          STAGE="hestia-${VERSION}-linux-x86_64"
+          mkdir -p "dist/${STAGE}"
+          cp app/moonlight "dist/${STAGE}/moonlight"
+          tar -C dist -czf "dist/${STAGE}.tar.gz" "${STAGE}"
+          ls -l dist
+
       - name: Upload binary
         uses: actions/upload-artifact@v6
         with:
           name: Hestia-Linux-${{ matrix.os }}-${{ env.CI_VERSION }}
-          path: app/moonlight
+          path: dist/*.tar.gz
           if-no-files-found: error

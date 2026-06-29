@@ -156,10 +156,18 @@ jobs:
           sudo ldconfig
           scripts/build-appimage.sh
 
+      - name: Rename to a versioned Hestia AppImage
+        run: |
+          VERSION="$(cat app/version.txt)"
+          SRC="build/installer-release/Moonlight-${CI_VERSION}-x86_64.AppImage"
+          DST="build/installer-release/Hestia-${VERSION}-x86_64.AppImage"
+          mv "$SRC" "$DST"
+          echo "APPIMAGE=$DST" >> "$GITHUB_ENV"
+
       - name: Upload Binaries
         uses: actions/upload-artifact@v6
         with:
-          name: Moonlight-LinuxAppImage-${{ env.CI_VERSION }}
-          path: build/installer-release/Moonlight-${{ env.CI_VERSION }}-x86_64.AppImage
+          name: Hestia-LinuxAppImage-${{ env.CI_VERSION }}
+          path: ${{ env.APPIMAGE }}
           compression-level: 0
           if-no-files-found: error

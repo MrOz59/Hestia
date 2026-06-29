@@ -50,6 +50,13 @@ jobs:
     with:
       ci_version: ${{ needs.setup.outputs.ci_version }}
 
+  # Distributable package for the focus platform (Arch/CachyOS). Runs by default.
+  build-arch:
+    needs: setup
+    uses: ./.github/workflows/build-arch.yml
+    with:
+      ci_version: ${{ needs.setup.outputs.ci_version }}
+
   # Opt-in targets. These only run on a manual dispatch with the matching input
   # enabled, so a red Windows/macOS/AppImage build never blocks normal CI.
   build-appimage:

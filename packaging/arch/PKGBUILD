@@ -1,0 +1,32 @@
+# Maintainer: Chaos Factory Team <dev@mroz.dev.br>
+#
+# Builds the Hestia desktop client (a Moonlight-Qt fork) for Arch/CachyOS.
+# This PKGBUILD builds from the surrounding checkout rather than downloading a
+# release tarball, so CI packages exactly the committed source (submodules
+# included). The installed binary is `moonlight`, matching the qmake target.
+pkgname=hestia
+pkgver=6.1.0
+pkgrel=1
+pkgdesc="Moonlight-Qt based desktop client focused on Hermes/Apollo/Sunshine hosts"
+arch=('x86_64')
+url="https://github.com/MrOz59/Hestia"
+license=('GPL3')
+depends=('qt6-base' 'qt6-declarative' 'qt6-svg' 'qt6-wayland'
+         'sdl2' 'sdl2_ttf' 'opus' 'ffmpeg' 'openssl'
+         'libva' 'libvdpau' 'libdrm' 'libplacebo'
+         'libxkbcommon' 'wayland')
+makedepends=('qt6-tools' 'pkgconf' 'nasm' 'wayland-protocols')
+options=('!lto')
+
+build() {
+    cd "$startdir/../.."
+
+    qmake6 PREFIX=/usr moonlight-qt.pro
+    make release -j"$(nproc)"
+}
+
+package() {
+    cd "$startdir/../.."
+
+    make INSTALL_ROOT="$pkgdir" install
+}

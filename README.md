@@ -8,6 +8,19 @@ Hestia detects those extensions when they are available, while preserving the
 normal Moonlight/Apollo/Sunshine connection path for hosts that do not provide
 them.
 
+## Platform focus
+
+**Hestia's current focus is Linux** (Arch/CachyOS first, with handhelds such as
+the Steam Deck in mind). That's where development, packaging, and CI are
+prioritized right now: continuous integration builds the client on Linux and
+produces an Arch/CachyOS package on every change.
+
+This focus may broaden in the future. The codebase is inherited from
+Moonlight-Qt and still contains the Windows and macOS paths, but those are
+**not a priority and are not actively tested** at the moment — their CI is
+opt-in and may be broken. If you need Windows or macOS today, prefer upstream
+[Moonlight-Qt](https://github.com/moonlight-stream/moonlight-qt).
+
 ## Features
 
 - Hardware accelerated video decoding on Windows, macOS, and Linux.
@@ -45,6 +58,20 @@ for Hermes as an Apollo-derived host:
 
 - https://github.com/ClassicOldSong/moonlight-android
 
+## Building on Arch / CachyOS
+
+Arch/CachyOS is the primary target. A PKGBUILD lives in
+[`packaging/arch/`](packaging/arch/PKGBUILD) and builds from a local checkout:
+
+```bash
+git clone --recurse-submodules https://github.com/MrOz59/Hestia.git
+cd Hestia/packaging/arch
+makepkg -si
+```
+
+The installed binary is `moonlight`. The same PKGBUILD is what CI uses to
+produce the Arch/CachyOS package artifact on every change.
+
 ## Building on Ubuntu/Lubuntu
 
 Install the base build dependencies:
@@ -52,13 +79,13 @@ Install the base build dependencies:
 ```bash
 sudo apt update
 sudo apt install \
-  build-essential git pkg-config qmake6 qt6-base-dev qt6-declarative-dev \
-  libqt6svg6-dev qt6-wayland qml6-module-qtquick qml6-module-qtquick-controls \
-  qml6-module-qtquick-templates qml6-module-qtquick-layouts \
-  qml6-module-qtquick-window libegl1-mesa-dev libgl1-mesa-dev libopus-dev \
-  libsdl2-dev libsdl2-ttf-dev libssl-dev libavcodec-dev libavformat-dev \
-  libswscale-dev libva-dev libvdpau-dev libxkbcommon-dev wayland-protocols \
-  libdrm-dev
+  build-essential git pkg-config qmake6 qt6-base-dev libqt6opengl6-dev \
+  qt6-declarative-dev libqt6svg6-dev qt6-wayland qml6-module-qtquick \
+  qml6-module-qtquick-controls qml6-module-qtquick-templates \
+  qml6-module-qtquick-layouts qml6-module-qtquick-window libegl1-mesa-dev \
+  libgl1-mesa-dev libopus-dev libsdl2-dev libsdl2-ttf-dev libssl-dev \
+  libavcodec-dev libavformat-dev libswscale-dev libva-dev libvdpau-dev \
+  libxkbcommon-dev wayland-protocols libdrm-dev
 ```
 
 Then build from the repository root:

@@ -1,0 +1,68 @@
+---
+# Arch / CachyOS package build for Hestia.
+#
+# GitHub doesn't offer an Arch runner, so this runs inside the official
+# archlinux container on an Ubuntu host. makepkg refuses to run as root, so we
+# build as an unprivileged user. The PKGBUILD builds from this checkout
+# (submodules included), so the package reflects the committed source.
+name: Build - Arch/CachyOS
+permissions:
+  contents: read
+
+on:
+  workflow_call:
+    inputs:
+      ci_version:
+        required: true
+        type: string
+  # Also allow running this one on its own.
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:latest
+      options: --privileged
+    env:
+      CI_VERSION: ${{ inputs.ci_version }}
+
+    steps:
+      - name: Install base tooling
+        run: |
+          pacman -Syu --noconfirm --needed base-devel git sudo
+
+      - name: Create build user
+        run: |
+          useradd -m builder
+          echo 'builder ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/builder
+          # makepkg needs to write into the workspace.
+          chmod -R a+rw "$GITHUB_WORKSPACE" || true
+
+      - name: Checkout Repository
+        uses: actions/checkout@v5
+        with:
+          submodules: 'recursive'
+          fetch-depth: 1
+
+      - name: Hand the checkout to the build user
+        run: chown -R builder:builder "$GITHUB_WORKSPACE"
+
+      - name: Build package (makepkg)
+        working-directory: packaging/arch
+        run: |
+          sudo -u builder makepkg -s --noconfirm --needed
+
+      - name: Collect package
+        id: pkg
+        run: |
+          PKG=$(ls packaging/arch/*.pkg.tar.* | head -n1)
+          echo "Built: $PKG"
+          echo "path=$PKG" >> "$GITHUB_OUTPUT"
+
+      - name: Upload package
+        uses: actions/upload-artifact@v6
+        with:
+          name: Hestia-Arch-${{ inputs.ci_version || github.sha }}
+          path: ${{ steps.pkg.outputs.path }}
+          if-no-files-found: error

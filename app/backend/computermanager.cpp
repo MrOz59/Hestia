@@ -78,6 +78,14 @@ private:
         HestiaCapabilities capabilities;
         http.probeHestiaCapabilities(&capabilities);
         m_Computer->setHestiaCapabilities(capabilities);
+
+        // Refresh streaming readiness for paired Hermes hosts so the UI can warn
+        // about problems before the user starts a session. Advisory only: a
+        // failure here just leaves the preflight unset (no warning shown).
+        HestiaPreflight preflight;
+        if (http.probeHestiaDiagnostics(&preflight)) {
+            m_Computer->setHestiaPreflight(preflight);
+        }
     }
 
     void run() override
@@ -637,6 +645,11 @@ private:
                    HestiaCapabilities capabilities;
                    http.probeHestiaCapabilities(&capabilities);
                    m_Computer->setHestiaCapabilities(capabilities);
+
+                   HestiaPreflight preflight;
+                   if (http.probeHestiaDiagnostics(&preflight)) {
+                       m_Computer->setHestiaPreflight(preflight);
+                   }
                }
 
                emit pairingCompleted(m_Computer, nullptr);

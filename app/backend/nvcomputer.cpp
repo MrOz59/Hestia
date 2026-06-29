@@ -219,6 +219,18 @@ void NvComputer::setHestiaCapabilities(const HestiaCapabilities& capabilities)
     hestiaCapabilities = capabilities;
 }
 
+void NvComputer::setHestiaPreflight(const HestiaPreflight& preflight)
+{
+    QWriteLocker lock(&this->lock);
+    hestiaPreflight = preflight;
+}
+
+bool NvComputer::hasHestiaReadinessWarning() const
+{
+    QReadLocker lock(&this->lock);
+    return hestiaPreflight.valid && !hestiaPreflight.ready;
+}
+
 bool NvComputer::wake() const
 {
     QByteArray wolPayload;

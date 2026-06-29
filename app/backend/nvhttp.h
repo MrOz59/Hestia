@@ -126,6 +126,13 @@ public:
     bool
     probeHestiaCapabilities(HestiaCapabilities* capabilities);
 
+    // Fetch the host's streaming-readiness preflight from the diagnostics
+    // endpoint. Requires a paired host (the endpoint needs the `view`
+    // permission). Returns false on any error; on success `preflight->valid`
+    // indicates whether the host actually reported a preflight section.
+    bool
+    probeHestiaDiagnostics(HestiaPreflight* preflight);
+
     bool
     prepareHestiaSession(const QJsonObject& sessionRequest);
 

@@ -148,6 +148,33 @@ CenteredGridView {
             running: visible
         }
 
+        // Streaming-readiness warning badge: shown when the host is online and
+        // paired but its Hermes preflight reports a problem (e.g. software
+        // encoding fallback, no virtual-display backend). Advisory only — the
+        // user can still connect; this just sets expectations up front.
+        Image {
+            id: readinessWarningIcon
+            anchors.right: pcIcon.right
+            anchors.top: pcIcon.top
+            anchors.rightMargin: 8
+            anchors.topMargin: 8
+            visible: model.online && model.paired && model.hestiaReadinessWarning
+            source: "qrc:/res/warning_FILL1_wght300_GRAD200_opsz24.svg"
+            sourceSize {
+                width: 36
+                height: 36
+            }
+
+            ToolTip.visible: readinessWarningMouseArea.containsMouse
+            ToolTip.text: model.hestiaReadinessDetails
+
+            MouseArea {
+                id: readinessWarningMouseArea
+                anchors.fill: parent
+                hoverEnabled: true
+            }
+        }
+
         Label {
             id: pcNameText
             text: model.name

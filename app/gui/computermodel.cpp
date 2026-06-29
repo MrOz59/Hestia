@@ -59,6 +59,20 @@ QVariant ComputerModel::data(const QModelIndex& index, int role) const
     case HestiaClipboardSyncRole:
         return computer->hestiaCapabilities.supportsProtocolV1 &&
                computer->hestiaCapabilities.features.clipboardSync;
+    case HestiaReadinessWarningRole:
+        // True only when the host reported a preflight and it is not ready.
+        return computer->hestiaPreflight.valid && !computer->hestiaPreflight.ready;
+    case HestiaReadinessDetailsRole: {
+        // A newline-separated list of the non-ok check messages, for a tooltip.
+        if (!computer->hestiaPreflight.valid) {
+            return QString();
+        }
+        QStringList lines;
+        for (const auto& problem : computer->hestiaPreflight.problems()) {
+            lines.append(problem.message);
+        }
+        return lines.join('\n');
+    }
     case DetailsRole: {
         QString state, pairState;
 

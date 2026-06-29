@@ -24,6 +24,7 @@
 #define HESTIA_CAPABILITIES_TIMEOUT_MS 2000
 #define HESTIA_SESSION_PREPARE_TIMEOUT_MS 5000
 #define HESTIA_CLIPBOARD_TIMEOUT_MS 1000
+#define HESTIA_DIAGNOSTICS_TIMEOUT_MS 2000
 
 #if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
 #define XML_NAME_EQUALS(x, y) ((x) == (y))
@@ -273,6 +274,71 @@ bool NvHTTP::probeHestiaCapabilities(HestiaCapabilities* capabilities)
 
     *capabilities = parsedCapabilities;
     qDebug() << "[Hestia] Host supports Hestia protocol v1";
+    return true;
+}
+
+bool NvHTTP::probeHestiaDiagnostics(HestiaPreflight* preflight)
+{
+    Q_ASSERT(preflight != nullptr);
+
+    if (m_ServerCert.isNull()) {
+        // Diagnostics needs a paired client certificate; skip silently.
+        return false;
+    }
+
+    QUrl url;
+    url.setScheme("https");
+    url.setHost(m_Address.address());
+    url.setPort(m_Address.port() + 1);
+    url.setPath("/api/hestia/v1/diagnostics");
+
+    QNetworkRequest request(url);
+    request.setRawHeader("Accept", "application/json");
+    request.setSslConfiguration(IdentityManager::get()->getSslConfig());
+
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    request.setAttribute(QNetworkRequest::Http2AllowedAttribute, false);
+#endif
+
+    auto sslErrorsConnection = connect(m_Nam, &QNetworkAccessManager::sslErrors, this, &NvHTTP::handleSslErrors);
+    QNetworkReply* reply = m_Nam->get(request);
+    QEventLoop loop;
+    QTimer timeoutTimer;
+    timeoutTimer.setSingleShot(true);
+    connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+    connect(&timeoutTimer, &QTimer::timeout, &loop, &QEventLoop::quit);
+    connect(QCoreApplication::instance(), &QCoreApplication::aboutToQuit, &loop, &QEventLoop::quit);
+    timeoutTimer.start(HESTIA_DIAGNOSTICS_TIMEOUT_MS);
+    loop.exec(QEventLoop::ExcludeUserInputEvents);
+    disconnect(sslErrorsConnection);
+
+    if (!reply->isFinished()) {
+        reply->abort();
+        delete reply;
+        return false;
+    }
+
+    const int statusCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+    if (reply->error() != QNetworkReply::NoError || statusCode < 200 || statusCode >= 300) {
+        delete reply;
+        return false;
+    }
+
+    QJsonParseError parseError;
+    const QJsonDocument document = QJsonDocument::fromJson(reply->readAll(), &parseError);
+    delete reply;
+    if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
+        return false;
+    }
+
+    HestiaPreflight parsedPreflight;
+    QString validationError;
+    if (!HestiaPreflight::fromDiagnosticsJson(document.object(), &parsedPreflight, &validationError)) {
+        qDebug().noquote() << "[Hestia] Diagnostics preflight unavailable (" + validationError + ")";
+        return false;
+    }
+
+    *preflight = parsedPreflight;
     return true;
 }
 

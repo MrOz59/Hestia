@@ -105,6 +105,16 @@ public:
 
     void setHestiaCapabilities(const HestiaCapabilities& capabilities);
 
+    // Streaming-readiness preflight (from the Hermes diagnostics endpoint).
+    // Refreshed alongside capabilities for paired hosts; advisory only.
+    HestiaPreflight hestiaPreflight;
+
+    void setHestiaPreflight(const HestiaPreflight& preflight);
+
+    // True when the host reported a preflight and it has at least one failing
+    // check (i.e. not ready to stream). Used to flag the host in the UI.
+    bool hasHestiaReadinessWarning() const;
+
     // Persisted traits
     NvAddress localAddress;
     NvAddress remoteAddress;

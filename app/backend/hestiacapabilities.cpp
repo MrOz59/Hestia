@@ -221,3 +221,56 @@ bool HestiaCapabilities::fromJson(const QJsonObject& response, HestiaCapabilitie
     *capabilities = parsed;
     return true;
 }
+
+bool HestiaPreflight::fromDiagnosticsJson(const QJsonObject& response, HestiaPreflight* preflight, QString* error)
+{
+    Q_ASSERT(preflight != nullptr);
+
+    if (!response.value("ok").toBool(false)) {
+        return fail(error, QStringLiteral("diagnostics response is not ok"));
+    }
+
+    // The preflight section is optional: an older Hermes may omit it. Treat its
+    // absence as "unknown" (not an error) so the host list never hard-fails on
+    // a host that simply doesn't report readiness yet.
+    if (!response.contains("preflight")) {
+        *preflight = HestiaPreflight {};
+        return true;
+    }
+
+    const QJsonObject preflightObj = response.value("preflight").toObject();
+
+    HestiaPreflight parsed;
+    parsed.valid = true;
+    parsed.ready = preflightObj.value("ready").toBool(false);
+
+    // The `id` set is intentionally open: ignore unknown ids rather than
+    // failing, so the server can add checks without breaking older clients.
+    // A status we don't recognize is treated as a warning (non-blocking).
+    const QJsonArray checks = preflightObj.value("checks").toArray();
+    for (const QJsonValue& value : checks) {
+        if (!value.isObject()) {
+            continue;
+        }
+        const QJsonObject checkObj = value.toObject();
+
+        HestiaPreflightCheck check;
+        check.id = checkObj.value("id").toString();
+        check.status = checkObj.value("status").toString();
+        check.message = checkObj.value("message").toString();
+
+        if (check.id.isEmpty()) {
+            continue;
+        }
+        if (check.status != QStringLiteral("ok") &&
+                check.status != QStringLiteral("warn") &&
+                check.status != QStringLiteral("fail")) {
+            check.status = QStringLiteral("warn");
+        }
+
+        parsed.checks.append(check);
+    }
+
+    *preflight = parsed;
+    return true;
+}

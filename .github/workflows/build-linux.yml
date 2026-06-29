@@ -1,0 +1,77 @@
+---
+# Linux compile/link CI for Hestia.
+#
+# This is intentionally a "does it build?" job, not a packaging job: it uses the
+# distro's Qt and multimedia libraries (the exact qmake6 + make flow documented
+# in the README) instead of compiling SDL/FFmpeg/libplacebo from source. That
+# keeps it fast and reliable as the primary signal that the client still builds
+# on Linux. AppImage packaging lives in build-appimage.yml and is opt-in.
+name: Build - Linux
+permissions:
+  contents: read
+
+on:
+  workflow_call:
+    inputs:
+      ci_version:
+        required: true
+        type: string
+
+jobs:
+  build:
+    name: Build (${{ matrix.os }})
+    env:
+      CI_VERSION: ${{ inputs.ci_version }}
+    strategy:
+      # Don't cancel 24.04 just because 22.04 failed (or vice versa); we want
+      # to see which Ubuntu/Qt combination broke.
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-22.04
+          - ubuntu-24.04
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v5
+        with:
+          submodules: 'recursive'
+          fetch-depth: 1
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          # Base toolchain + Qt6 + QML modules, then the multimedia/codec and
+          # windowing libraries app.pro consumes via pkg-config. Optional ones
+          # (libva, vdpau, drm, libplacebo) are gated by packagesExist() in the
+          # .pro, so a missing package degrades features rather than failing.
+          sudo apt-get install -y --no-install-recommends \
+            build-essential git pkg-config nasm \
+            qmake6 qt6-base-dev qt6-declarative-dev libqt6svg6-dev qt6-wayland \
+            qml6-module-qtquick qml6-module-qtquick-controls \
+            qml6-module-qtquick-templates qml6-module-qtquick-layouts \
+            qml6-module-qtquick-window \
+            libegl1-mesa-dev libgl1-mesa-dev libgles2-mesa-dev \
+            libopus-dev libsdl2-dev libsdl2-ttf-dev libssl-dev \
+            libavcodec-dev libavformat-dev libavutil-dev libswscale-dev \
+            libva-dev libvdpau-dev libdrm-dev libplacebo-dev \
+            libxkbcommon-dev wayland-protocols libwayland-dev libx11-dev
+
+      - name: Configure (qmake6)
+        run: qmake6 moonlight-qt.pro
+
+      - name: Build (make release)
+        run: make release -j"$(nproc)"
+
+      - name: Verify binary was produced
+        run: |
+          test -x app/moonlight || { echo "::error::app/moonlight was not built"; exit 1; }
+          file app/moonlight
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v6
+        with:
+          name: Hestia-Linux-${{ matrix.os }}-${{ env.CI_VERSION }}
+          path: app/moonlight
+          if-no-files-found: error

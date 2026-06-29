@@ -8,6 +8,23 @@ on:
   pull_request:
     branches:
       - master
+  # Manual runs can opt into the heavier / non-focus targets (AppImage
+  # packaging, Steam Link, Windows, macOS) that aren't part of the default
+  # push/PR signal.
+  workflow_dispatch:
+    inputs:
+      build_appimage:
+        description: 'Build the Linux AppImage package'
+        type: boolean
+        default: false
+      build_steamlink:
+        description: 'Build the Steam Link target'
+        type: boolean
+        default: false
+      build_windows_macos:
+        description: 'Build Windows and macOS (currently unsupported / best-effort)'
+        type: boolean
+        default: false
 
 concurrency:
   group: build-${{ github.ref }}
@@ -26,20 +43,32 @@ jobs:
           CI_VERSION=`echo ${GITHUB_SHA} | cut -c1-6`
           echo "ci_version=${CI_VERSION}" >> "${GITHUB_OUTPUT}"
 
+  # Primary signal: the client builds on Linux. Always runs.
+  build-linux:
+    needs: setup
+    uses: ./.github/workflows/build-linux.yml
+    with:
+      ci_version: ${{ needs.setup.outputs.ci_version }}
+
+  # Opt-in targets. These only run on a manual dispatch with the matching input
+  # enabled, so a red Windows/macOS/AppImage build never blocks normal CI.
   build-appimage:
     needs: setup
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.build_appimage }}
     uses: ./.github/workflows/build-appimage.yml
     with:
       ci_version: ${{ needs.setup.outputs.ci_version }}
 
   build-steamlink:
     needs: setup
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.build_steamlink }}
     uses: ./.github/workflows/build-steamlink.yml
     with:
       ci_version: ${{ needs.setup.outputs.ci_version }}
 
   build-windows-macos:
     needs: setup
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.build_windows_macos }}
     uses: ./.github/workflows/build-win-mac.yml
     with:
       ci_version: ${{ needs.setup.outputs.ci_version }}

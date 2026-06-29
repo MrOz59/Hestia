@@ -251,15 +251,78 @@ CenteredGridView {
                     visible: model.online && model.paired && model.hestiaEnhanced
                     onTriggered: {
                         var diagnostics = computerModel.getHestiaDiagnostics(index)
-                        if (!diagnostics.ok || !diagnostics.dependencies || !diagnostics.dependencies.clipboard) {
+                        if (!diagnostics.ok) {
                             hestiaStatusDialog.text = qsTr("Hermes diagnostics are unavailable for this host.")
-                        } else {
-                            var clipboard = diagnostics.dependencies.clipboard
-                            hestiaStatusDialog.text = qsTr("Clipboard support: %1\nDiagnostic: %2\n\n%3")
+                            hestiaStatusDialog.open()
+                            return
+                        }
+
+                        var sections = []
+
+                        var runtime = diagnostics.runtime
+                        if (runtime) {
+                            var encoder = runtime.encoder
+                            if (encoder) {
+                                if (encoder.probed === false || !encoder.name) {
+                                    sections.push(qsTr("Encoder: not probed yet"))
+                                } else {
+                                    var codecs = (encoder.codecs && encoder.codecs.length > 0)
+                                            ? encoder.codecs.join(", ")
+                                            : qsTr("unknown")
+                                    sections.push(qsTr("Encoder: %1 (%2)\nCodecs: %3")
+                                            .arg(encoder.name)
+                                            .arg(encoder.hardware ? qsTr("hardware") : qsTr("software"))
+                                            .arg(codecs))
+                                }
+                            }
+
+                            var sessionsInfo = runtime.sessions
+                            if (sessionsInfo) {
+                                var sessionLine = qsTr("Active sessions: %1 (%2)")
+                                        .arg(sessionsInfo.active)
+                                        .arg(sessionsInfo.streaming ? qsTr("streaming") : qsTr("idle"))
+                                if (!sessionsInfo.streaming && sessionsInfo.last_termination
+                                        && sessionsInfo.last_termination !== "unknown") {
+                                    var reasonText
+                                    switch (sessionsInfo.last_termination) {
+                                    case "client_quit": reasonText = qsTr("client closed the stream"); break
+                                    case "client_lost": reasonText = qsTr("client connection lost (network/crash)"); break
+                                    case "handshake_failed": reasonText = qsTr("stream handshake failed"); break
+                                    case "protocol_error": reasonText = qsTr("protocol error"); break
+                                    case "server_stopped": reasonText = qsTr("stopped by the host"); break
+                                    case "permission_revoked": reasonText = qsTr("permission revoked"); break
+                                    default: reasonText = sessionsInfo.last_termination
+                                    }
+                                    sessionLine += "\n" + qsTr("Last session ended: %1").arg(reasonText)
+                                }
+                                sections.push(sessionLine)
+                            }
+
+                            var pipeline = runtime.pipeline
+                            if (pipeline) {
+                                sections.push(qsTr("FPS: %1\nBitrate: %2 kbps\nEncode time: %3 ms\nCapture→encode: %4 ms\nFrames: %5 encoded / %6 dropped")
+                                        .arg(Math.round(pipeline.fps))
+                                        .arg(Math.round(pipeline.bitrate_kbps))
+                                        .arg(pipeline.encode_ms.toFixed(2))
+                                        .arg(pipeline.capture_to_encode_ms.toFixed(2))
+                                        .arg(pipeline.frames_encoded)
+                                        .arg(pipeline.frames_dropped))
+                            } else {
+                                sections.push(qsTr("Live pipeline metrics: available while streaming"))
+                            }
+                        }
+
+                        var clipboard = diagnostics.dependencies ? diagnostics.dependencies.clipboard : null
+                        if (clipboard) {
+                            sections.push(qsTr("Clipboard support: %1\nDiagnostic: %2\n%3")
                                     .arg(clipboard.available ? qsTr("Ready") : qsTr("Unavailable"))
                                     .arg(clipboard.diagnostic)
-                                    .arg(clipboard.available ? qsTr("No action is required.") : clipboard.manualInstall)
+                                    .arg(clipboard.available ? qsTr("No action is required.") : clipboard.manualInstall))
                         }
+
+                        hestiaStatusDialog.text = sections.length > 0
+                                ? sections.join("\n\n")
+                                : qsTr("Hermes diagnostics are unavailable for this host.")
                         hestiaStatusDialog.open()
                     }
                 }

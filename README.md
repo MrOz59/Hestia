@@ -28,7 +28,10 @@ When connected to Hermes, Hestia can use the host's Hestia protocol v1 API for:
 - Capability detection.
 - Session preparation before streaming.
 - Session cleanup after streaming.
-- Host diagnostics display.
+- Host diagnostics display, including live runtime status: the real encoder
+  in use (hardware vs software + codecs), active/streaming sessions, and live
+  pipeline metrics (FPS, bitrate, encode time, capture→encode latency, and
+  encoded/dropped frames) while a stream is running.
 - Optional clipboard synchronization.
 - Optional host-side display/session preferences.
 

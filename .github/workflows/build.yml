@@ -20,7 +20,7 @@ on:
       build_appimage:
         description: 'Build the Linux AppImage package'
         type: boolean
-        default: false
+        default: true
       build_steamlink:
         description: 'Build the Steam Link target'
         type: boolean

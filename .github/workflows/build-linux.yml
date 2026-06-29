@@ -48,7 +48,8 @@ jobs:
           # .pro, so a missing package degrades features rather than failing.
           sudo apt-get install -y --no-install-recommends \
             build-essential git pkg-config nasm \
-            qmake6 qt6-base-dev qt6-declarative-dev libqt6svg6-dev qt6-wayland \
+            qmake6 qt6-base-dev libqt6opengl6-dev \
+            qt6-declarative-dev libqt6svg6-dev qt6-wayland \
             qml6-module-qtquick qml6-module-qtquick-controls \
             qml6-module-qtquick-templates qml6-module-qtquick-layouts \
             qml6-module-qtquick-window \

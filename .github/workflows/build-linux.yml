@@ -23,12 +23,14 @@ jobs:
     env:
       CI_VERSION: ${{ inputs.ci_version }}
     strategy:
-      # Don't cancel 24.04 just because 22.04 failed (or vice versa); we want
-      # to see which Ubuntu/Qt combination broke.
       fail-fast: false
       matrix:
+        # Ubuntu 24.04 only. 22.04 ships a libplacebo-dev built against an older
+        # FFmpeg ABI than its own libavcodec, so libplacebo's libav headers fail
+        # to compile there — a distro packaging mismatch, not a Hestia issue
+        # (upstream sidesteps it by building libplacebo/FFmpeg from source). The
+        # focus is modern Linux, so we don't carry that broken combination.
         os:
-          - ubuntu-22.04
           - ubuntu-24.04
     runs-on: ${{ matrix.os }}
 

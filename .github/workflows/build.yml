@@ -61,15 +61,18 @@ jobs:
     with:
       ci_version: ${{ needs.setup.outputs.ci_version }}
 
-  # Portable AppImage. Runs by default (push/PR), but is non-blocking: it builds
-  # SDL/FFmpeg/libplacebo from source, which is slow (~30-50 min) and more prone
-  # to breaking on a pinned-dependency change. continue-on-error keeps a failed
-  # AppImage from turning the whole run red. A manual dispatch can skip it via
-  # the build_appimage input.
+  # Portable AppImage. Runs by default (push/PR). It builds SDL/FFmpeg/libplacebo
+  # from source, which is slow (~30-50 min) and more prone to breaking on a
+  # pinned-dependency change, so it is kept non-blocking: the nightly/release
+  # jobs gate only on the Linux and Arch builds (see their if:), so a failed
+  # AppImage doesn't hold back a release. A manual dispatch can skip it via the
+  # build_appimage input.
+  #
+  # NB: continue-on-error isn't valid on a job that uses a reusable workflow, so
+  # the non-blocking behavior lives in the consumers' conditions instead.
   build-appimage:
     needs: setup
     if: ${{ github.event_name != 'workflow_dispatch' || inputs.build_appimage }}
-    continue-on-error: true
     uses: ./.github/workflows/build-appimage.yml
     with:
       ci_version: ${{ needs.setup.outputs.ci_version }}

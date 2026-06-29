@@ -13,9 +13,11 @@ url="https://github.com/MrOz59/Hestia"
 license=('GPL3')
 depends=('qt6-base' 'qt6-declarative' 'qt6-svg' 'qt6-wayland'
          'sdl2' 'sdl2_ttf' 'opus' 'ffmpeg' 'openssl'
-         'libva' 'libvdpau' 'libdrm' 'libplacebo'
+         'libva' 'libvdpau' 'libdrm' 'libplacebo' 'vulkan-icd-loader'
          'libxkbcommon' 'wayland')
-makedepends=('qt6-tools' 'pkgconf' 'nasm' 'wayland-protocols')
+# vulkan-headers is needed at build time because libplacebo's public headers
+# (pulled in via packagesExist(libplacebo)) include <vulkan/vulkan.h>.
+makedepends=('qt6-tools' 'pkgconf' 'nasm' 'wayland-protocols' 'vulkan-headers')
 options=('!lto')
 
 build() {

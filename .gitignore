@@ -49,6 +49,10 @@ config.tests/*/Makefile.Release
 # config.tests build outputs (probe binaries/objects)
 config.tests/EGL/EGL
 config.tests/SL/SL
+tests/moc_predefs.h
+tests/target_wrapper.sh
+tests/tst_clientlogic
+tests/tst_clientlogic.moc
 
 # Qt / IDE / Editor
 *.qmake.cache

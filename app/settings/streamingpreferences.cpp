@@ -8,8 +8,6 @@
 #include <QCoreApplication>
 #include <QLocale>
 #include <QReadWriteLock>
-#include <QtMath>
-
 #include <QtDebug>
 
 #define SER_STREAMSETTINGS "streamsettings"
@@ -384,125 +382,18 @@ void StreamingPreferences::save()
     settings.setValue(SER_KEEPAWAKE, keepAwake);
 }
 
-int StreamingPreferences::getDefaultBitrate(int width, int height, int fps, bool yuv444)
-{
-    // Don't scale bitrate linearly beyond 60 FPS. It's definitely not a linear
-    // bitrate increase for frame rate once we get to values that high.
-    float frameRateFactor = (fps <= 60 ? fps : (qSqrt(fps / 60.f) * 60.f)) / 30.f;
-
-    // TODO: Collect some empirical data to see if these defaults make sense.
-    // We're just using the values that the Shield used, as we have for years.
-    static const struct resTable {
-        int pixels;
-        int factor;
-    } resTable[] {
-        { 640 * 360, 1 },
-        { 854 * 480, 2 },
-        { 1280 * 720, 5 },
-        { 1920 * 1080, 10 },
-        { 2560 * 1440, 20 },
-        { 3840 * 2160, 40 },
-        { -1, -1 },
-    };
-
-    // Calculate the resolution factor by linear interpolation of the resolution table
-    float resolutionFactor;
-    int pixels = width * height;
-    for (int i = 0;; i++) {
-        if (pixels == resTable[i].pixels) {
-            // We can bail immediately for exact matches
-            resolutionFactor = resTable[i].factor;
-            break;
-        }
-        else if (pixels < resTable[i].pixels) {
-            if (i == 0) {
-                // Never go below the lowest resolution entry
-                resolutionFactor = resTable[i].factor;
-            }
-            else {
-                // Interpolate between the entry greater than the chosen resolution (i) and the entry less than the chosen resolution (i-1)
-                resolutionFactor = ((float)(pixels - resTable[i-1].pixels) / (resTable[i].pixels - resTable[i-1].pixels)) * (resTable[i].factor - resTable[i-1].factor) + resTable[i-1].factor;
-            }
-            break;
-        }
-        else if (resTable[i].pixels == -1) {
-            // Never go above the highest resolution entry
-            resolutionFactor = resTable[i-1].factor;
-            break;
-        }
-    }
-
-    if (yuv444) {
-        // This is rough estimation based on the fact that 4:4:4 doubles the amount of raw YUV data compared to 4:2:0
-        resolutionFactor *= 2;
-    }
-
-    return qRound(resolutionFactor * frameRateFactor) * 1000;
-}
-
 void StreamingPreferences::applyPreset(StreamingPreset preset, int nativeWidth, int nativeHeight, int nativeFps)
 {
     if (preset == PRESET_CUSTOM) {
         return;
     }
 
-    // Fall back to sensible defaults if the caller couldn't determine the
-    // display's native mode.
-    if (nativeWidth <= 0 || nativeHeight <= 0) {
-        nativeWidth = 1920;
-        nativeHeight = 1080;
-    }
-    if (nativeFps <= 0) {
-        nativeFps = 60;
-    }
-
-    int targetWidth = nativeWidth;
-    int targetHeight = nativeHeight;
-    int targetFps = nativeFps;
-    double bitrateScale = 1.0;
-
-    // Caps a resolution to a maximum pixel count while preserving aspect ratio,
-    // so non-16:9 (e.g. handheld) panels scale down correctly.
-    auto capResolution = [&](int maxWidth, int maxHeight) {
-        const qint64 maxPixels = (qint64)maxWidth * maxHeight;
-        const qint64 pixels = (qint64)targetWidth * targetHeight;
-        if (pixels > maxPixels) {
-            const double scale = qSqrt((double)maxPixels / pixels);
-            // Round to even dimensions, which encoders universally require.
-            targetWidth = (int)(targetWidth * scale) & ~1;
-            targetHeight = (int)(targetHeight * scale) & ~1;
-        }
-    };
-
-    switch (preset) {
-    case PRESET_QUALITY:
-        // Native resolution and refresh, with extra bitrate headroom.
-        bitrateScale = 1.25;
-        break;
-    case PRESET_BALANCED:
-        // Native resolution, but cap frame rate at 60 for a lighter load.
-        targetFps = qMin(nativeFps, 60);
-        break;
-    case PRESET_FAST:
-        // Cap to 1080p60 for low latency on weaker decoders/networks.
-        capResolution(1920, 1080);
-        targetFps = qMin(nativeFps, 60);
-        bitrateScale = 0.9;
-        break;
-    case PRESET_BATTERY:
-        // Minimal load for handhelds: 720p30 and a reduced bitrate.
-        capResolution(1280, 720);
-        targetFps = qMin(nativeFps, 30);
-        bitrateScale = 0.7;
-        break;
-    case PRESET_CUSTOM:
-        return;
-    }
-
-    width = targetWidth;
-    height = targetHeight;
-    fps = targetFps;
-    bitrateKbps = qRound(getDefaultBitrate(targetWidth, targetHeight, targetFps, enableYUV444) * bitrateScale);
+    const PresetConfiguration configuration =
+            calculatePreset(preset, nativeWidth, nativeHeight, nativeFps, enableYUV444);
+    width = configuration.width;
+    height = configuration.height;
+    fps = configuration.fps;
+    bitrateKbps = configuration.bitrateKbps;
 
     emit displayModeChanged();
     emit bitrateChanged();

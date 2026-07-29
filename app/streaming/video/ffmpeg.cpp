@@ -986,26 +986,10 @@ void FFmpegVideoDecoder::appendDiagnosisText(const Diagnostics::Diagnosis& diagn
         return;
     }
 
-    QByteArray summary = diagnosis.summary.toUtf8();
-    if (!summary.isEmpty()) {
-        int ret;
-        if (diagnosis.keyMetric.isEmpty()) {
-            ret = snprintf(&output[offset], length - offset, "\nDiagnosis: %s\n", summary.constData());
-        }
-        else {
-            QByteArray metric = diagnosis.keyMetric.toUtf8();
-            ret = snprintf(&output[offset], length - offset, "\nDiagnosis: %s (%s)\n",
-                           summary.constData(), metric.constData());
-        }
-        if (ret < 0 || ret >= length - offset) {
-            return;
-        }
-        offset += ret;
-    }
-
-    QByteArray spikes = history.summarize().toUtf8();
-    if (!spikes.isEmpty()) {
-        snprintf(&output[offset], length - offset, "%s\n", spikes.constData());
+    const QByteArray diagnosisText =
+            (QLatin1Char('\n') + Diagnostics::formatOverlayText(diagnosis, history)).toUtf8();
+    if (!diagnosisText.isEmpty()) {
+        snprintf(&output[offset], length - offset, "%s", diagnosisText.constData());
     }
 }
 
@@ -2196,4 +2180,3 @@ void FFmpegVideoDecoder::renderFrameOnMainThread()
 {
     m_Pacer->renderOnMainThread();
 }
-

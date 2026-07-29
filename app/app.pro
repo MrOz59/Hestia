@@ -186,6 +186,7 @@ SOURCES += \
     cli/startstream.cpp \
     settings/compatfetcher.cpp \
     settings/mappingfetcher.cpp \
+    settings/presetconfiguration.cpp \
     settings/streamingpreferences.cpp \
     streaming/input/abstouch.cpp \
     streaming/input/gamepad.cpp \
@@ -193,6 +194,7 @@ SOURCES += \
     streaming/input/keyboard.cpp \
     streaming/input/mouse.cpp \
     streaming/input/reltouch.cpp \
+    streaming/hestianegotiation.cpp \
     streaming/session.cpp \
     streaming/audio/audio.cpp \
     streaming/audio/renderers/sdlaud.cpp \
@@ -233,6 +235,7 @@ HEADERS += \
     cli/startstream.h \
     settings/streamingpreferences.h \
     streaming/input/input.h \
+    streaming/hestianegotiation.h \
     streaming/session.h \
     streaming/audio/renderers/renderer.h \
     streaming/audio/renderers/sdl.h \

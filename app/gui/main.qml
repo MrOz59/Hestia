@@ -89,11 +89,11 @@ ApplicationWindow {
         visible: false
         font: ToolTip.toolTip.font
         text: ToolTip.toolTip.text
-    }
 
-    // This configures the maximum width of the singleton attached QML ToolTip. If left unconstrained,
-    // it will never insert a line break and just extend on forever.
-    ToolTip.toolTip.contentWidth: Math.min(tooltipTextLayoutHelper.width, 400)
+        // Keep the shared tooltip within a readable width. This must be
+        // attached to an Item rather than the top-level ApplicationWindow.
+        ToolTip.toolTip.contentWidth: Math.min(width, 400)
+    }
 
     function goBack() {
         if (clearOnBack) {
@@ -327,7 +327,7 @@ ApplicationWindow {
 
                 Shortcut {
                     id: newPcShortcut
-                    sequence: StandardKey.New
+                    sequences: [ StandardKey.New ]
                     onActivated: addPcButton.clicked()
                 }
 
@@ -391,7 +391,7 @@ ApplicationWindow {
 
                 Shortcut {
                     id: helpShortcut
-                    sequence: StandardKey.HelpContents
+                    sequences: [ StandardKey.HelpContents ]
                     onActivated: helpButton.clicked()
                 }
 
@@ -434,7 +434,7 @@ ApplicationWindow {
 
                 Shortcut {
                     id: settingsShortcut
-                    sequence: StandardKey.Preferences
+                    sequences: [ StandardKey.Preferences ]
                     onActivated: settingsButton.clicked()
                 }
 

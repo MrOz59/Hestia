@@ -1,10 +1,15 @@
 #include "statsdiagnostics.h"
 
-#include <QObject>
+#include <QCoreApplication>
 
 namespace Diagnostics {
 
 namespace {
+
+class Translation
+{
+    Q_DECLARE_TR_FUNCTIONS(HestiaDiagnostics)
+};
 
 // A window needs at least this many rendered frames before we trust it. Avoids
 // classifying noise during the first moments of a stream or a brief stall.
@@ -18,9 +23,17 @@ const double DROP_PERCENT_THRESHOLD = 2.0;
 // per-frame time budget, even if no frames have been dropped yet.
 const double DECODE_BUDGET_FRACTION = 0.6;
 
-// Rendering (including vsync wait) above this fraction of the budget points at a
-// presentation bottleneck.
-const double RENDER_BUDGET_FRACTION = 0.9;
+// Rendering includes a normal V-sync wait, so one full frame budget is healthy.
+// Require meaningful overrun before declaring presentation-bound.
+const double RENDER_BUDGET_FRACTION = 1.15;
+
+// More than two frame budgets in the pacing queues indicates persistent
+// backlog rather than the normal one-frame presentation latency.
+const double QUEUE_BUDGET_MULTIPLIER = 2.0;
+
+// ENet reports RTT variance in milliseconds. Above this value, pacing drops
+// are more likely network jitter than a local presentation problem.
+const double RTT_VARIANCE_HIGH_MS = 10.0;
 
 // Host processing latency (server side) considered high, in milliseconds.
 const double HOST_LATENCY_HIGH_MS = 30.0;
@@ -58,6 +71,7 @@ Diagnosis diagnose(const VIDEO_STATS& stats, int targetFps)
 
     const double decodeMs = perFrameMs(stats.totalDecodeTimeUs, stats.decodedFrames);
     const double renderMs = perFrameMs(stats.totalRenderTimeUs, stats.renderedFrames);
+    const double queueMs = perFrameMs(stats.totalPacerTimeUs, stats.renderedFrames);
 
     const double networkDropPct = dropPercent(stats.networkDroppedFrames, stats.totalFrames);
     const double pacerDropPct = dropPercent(stats.pacerDroppedFrames, stats.decodedFrames);
@@ -69,11 +83,26 @@ Diagnosis diagnose(const VIDEO_STATS& stats, int targetFps)
     // Score each candidate cause; the highest score wins. Scores are normalized
     // so that 1.0 is "right at the threshold" and higher is worse, making the
     // comparison across heterogeneous metrics fair.
-    double networkScore = networkDropPct / DROP_PERCENT_THRESHOLD;
-    double renderScore = qMax(pacerDropPct / DROP_PERCENT_THRESHOLD,
-                              renderMs / (frameBudgetMs * RENDER_BUDGET_FRACTION));
+    const double networkDropScore = networkDropPct / DROP_PERCENT_THRESHOLD;
+    const double jitterScore = stats.lastRttVariance / RTT_VARIANCE_HIGH_MS;
+    const double pacerDropScore = pacerDropPct / DROP_PERCENT_THRESHOLD;
+    double networkScore = qMax(networkDropScore, jitterScore);
+    double renderScore = qMax(renderMs / (frameBudgetMs * RENDER_BUDGET_FRACTION),
+                              queueMs / (frameBudgetMs * QUEUE_BUDGET_MULTIPLIER));
     double decodeScore = decodeMs / (frameBudgetMs * DECODE_BUDGET_FRACTION);
     double hostScore = avgHostMs / HOST_LATENCY_HIGH_MS;
+
+    // Pacer drops are ambiguous: they can be caused by bursty network delivery
+    // or by a local queue/render backlog. Attribute them using the independent
+    // RTT/drop signals instead of always blaming presentation.
+    if (pacerDropScore >= 1.0) {
+        if (jitterScore >= 1.0 || networkDropScore >= 1.0) {
+            networkScore = qMax(networkScore, pacerDropScore);
+        }
+        else {
+            renderScore = qMax(renderScore, pacerDropScore);
+        }
+    }
 
     // Decoded throughput falling short of what the network delivered is a strong
     // decode-bound signal even when individual decode times look acceptable.
@@ -94,29 +123,37 @@ Diagnosis diagnose(const VIDEO_STATS& stats, int targetFps)
 
     switch (dominant) {
     case BOTTLENECK_NONE:
-        result.summary = QObject::tr("Stream is healthy.");
+        result.summary = Translation::tr("Stream is healthy.");
         break;
     case BOTTLENECK_DECODE:
-        result.summary = QObject::tr("Your decoder is falling behind. Try a lighter codec "
-                                     "(e.g. HEVC to H.264) or lower the resolution or frame rate.");
-        result.keyMetric = QObject::tr("decode %1 ms/frame").arg(decodeMs, 0, 'f', 1);
+        result.summary = Translation::tr("Your decoder is falling behind. Try a lighter codec "
+                                         "(e.g. HEVC to H.264) or lower the resolution or frame rate.");
+        result.keyMetric = Translation::tr("decode %1 ms/frame").arg(decodeMs, 0, 'f', 1);
         break;
     case BOTTLENECK_RENDER:
-        result.summary = QObject::tr("Frames are being dropped during presentation. Check V-Sync "
-                                     "and that the display refresh rate matches the stream.");
-        result.keyMetric = pacerDropPct >= DROP_PERCENT_THRESHOLD
-                ? QObject::tr("%1%% pacing drops").arg(pacerDropPct, 0, 'f', 1)
-                : QObject::tr("render %1 ms/frame").arg(renderMs, 0, 'f', 1);
+        result.summary = Translation::tr("Frames are being delayed during presentation. Check V-Sync "
+                                         "and that the display refresh rate matches the stream.");
+        if (pacerDropPct >= DROP_PERCENT_THRESHOLD) {
+            result.keyMetric = Translation::tr("%1% pacing drops").arg(pacerDropPct, 0, 'f', 1);
+        }
+        else if (queueMs >= frameBudgetMs * QUEUE_BUDGET_MULTIPLIER) {
+            result.keyMetric = Translation::tr("queue %1 ms/frame").arg(queueMs, 0, 'f', 1);
+        }
+        else {
+            result.keyMetric = Translation::tr("render %1 ms/frame").arg(renderMs, 0, 'f', 1);
+        }
         break;
     case BOTTLENECK_NETWORK:
-        result.summary = QObject::tr("Your network is dropping frames. Lower the bitrate or move "
-                                     "closer to the access point / use a wired connection.");
-        result.keyMetric = QObject::tr("%1%% network drops").arg(networkDropPct, 0, 'f', 1);
+        result.summary = Translation::tr("Your network is dropping or delaying frames. Lower the bitrate "
+                                         "or move closer to the access point / use a wired connection.");
+        result.keyMetric = networkDropPct >= DROP_PERCENT_THRESHOLD
+                ? Translation::tr("%1% network drops").arg(networkDropPct, 0, 'f', 1)
+                : Translation::tr("RTT variance %1 ms").arg(stats.lastRttVariance);
         break;
     case BOTTLENECK_HOST:
-        result.summary = QObject::tr("The host is slow to produce frames. This is a server-side "
-                                     "bottleneck, not your client.");
-        result.keyMetric = QObject::tr("host %1 ms/frame").arg(avgHostMs, 0, 'f', 1);
+        result.summary = Translation::tr("The host is slow to produce frames. This is a server-side "
+                                         "bottleneck, not your client.");
+        result.keyMetric = Translation::tr("host %1 ms/frame").arg(avgHostMs, 0, 'f', 1);
         break;
     }
 
@@ -135,10 +172,14 @@ void SpikeHistory::record(const Diagnosis& diagnosis)
 int SpikeHistory::spikeCount() const
 {
     int count = 0;
+    Bottleneck previous = BOTTLENECK_NONE;
     for (int i = 0; i < m_Count; i++) {
-        if (m_Samples[i] != BOTTLENECK_NONE) {
+        const int index = (m_Head - m_Count + i + CAPACITY) % CAPACITY;
+        const Bottleneck current = m_Samples[index];
+        if (current != BOTTLENECK_NONE && current != previous) {
             count++;
         }
+        previous = current;
     }
     return count;
 }
@@ -146,13 +187,16 @@ int SpikeHistory::spikeCount() const
 QString SpikeHistory::summarize() const
 {
     int counts[BOTTLENECK_HOST + 1] = {};
-    int spikes = 0;
+    Bottleneck previous = BOTTLENECK_NONE;
     for (int i = 0; i < m_Count; i++) {
-        if (m_Samples[i] != BOTTLENECK_NONE) {
-            counts[m_Samples[i]]++;
-            spikes++;
+        const int index = (m_Head - m_Count + i + CAPACITY) % CAPACITY;
+        const Bottleneck current = m_Samples[index];
+        if (current != BOTTLENECK_NONE && current != previous) {
+            counts[current]++;
         }
+        previous = current;
     }
+    const int spikes = spikeCount();
 
     if (spikes == 0) {
         return QString();
@@ -168,22 +212,43 @@ QString SpikeHistory::summarize() const
 
     QString causeText;
     switch (mostCommon) {
-    case BOTTLENECK_DECODE:  causeText = QObject::tr("mostly decode"); break;
-    case BOTTLENECK_RENDER:  causeText = QObject::tr("mostly pacing"); break;
-    case BOTTLENECK_NETWORK: causeText = QObject::tr("mostly network"); break;
-    case BOTTLENECK_HOST:    causeText = QObject::tr("mostly host"); break;
-    default:                 causeText = QObject::tr("mixed"); break;
+    case BOTTLENECK_DECODE:  causeText = Translation::tr("mostly decode"); break;
+    case BOTTLENECK_RENDER:  causeText = Translation::tr("mostly pacing"); break;
+    case BOTTLENECK_NETWORK: causeText = Translation::tr("mostly network"); break;
+    case BOTTLENECK_HOST:    causeText = Translation::tr("mostly host"); break;
+    default:                 causeText = Translation::tr("mixed"); break;
     }
 
     // Report the window length actually covered, in minutes (rounded up).
     const int minutes = (m_Count + 59) / 60;
-    return QObject::tr("%1 spike(s) in last ~%2 min (%3)").arg(spikes).arg(minutes).arg(causeText);
+    return Translation::tr("%n spike(s) in last ~%1 min (%2)", nullptr, spikes)
+            .arg(minutes)
+            .arg(causeText);
 }
 
 void SpikeHistory::clear()
 {
     m_Count = 0;
     m_Head = 0;
+}
+
+QString formatOverlayText(const Diagnosis& diagnosis, const SpikeHistory& history)
+{
+    QString text;
+    if (!diagnosis.summary.isEmpty()) {
+        text += diagnosis.keyMetric.isEmpty()
+                ? Translation::tr("Diagnosis: %1").arg(diagnosis.summary)
+                : Translation::tr("Diagnosis: %1 (%2)")
+                          .arg(diagnosis.summary, diagnosis.keyMetric);
+        text += QLatin1Char('\n');
+    }
+
+    const QString spikes = history.summarize();
+    if (!spikes.isEmpty()) {
+        text += spikes;
+        text += QLatin1Char('\n');
+    }
+    return text;
 }
 
 } // namespace Diagnostics

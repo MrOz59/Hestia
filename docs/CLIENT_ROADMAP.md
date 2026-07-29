@@ -1,13 +1,14 @@
 # Hestia Client-Side Roadmap
 
-Status: **draft for review** · Last updated: 2026-06-26
+Status: **active** · Last updated: 2026-07-29
 
 ## Scope
 
-Hestia is a **desktop** Moonlight-Qt fork (C++/Qt) targeting Windows, Linux,
-macOS, **and Linux handhelds** (Steam Deck and similar — they run the desktop
-build). This roadmap deliberately **excludes** mobile/TV-only concerns that do
-not apply to a desktop client:
+Hestia is a **desktop** Moonlight-Qt fork (C++/Qt) focused on **Linux first**,
+especially Arch/CachyOS and Linux handhelds such as Steam Deck. Windows and
+macOS paths remain inherited from upstream but are currently best-effort and
+are not release gates. This roadmap deliberately **excludes** mobile/TV-only
+concerns that do not apply to a desktop client:
 
 - Touch controls / on-screen gamepad / per-game touch layouts
 - Virtual keyboard, soft-keyboard switching
@@ -26,11 +27,11 @@ phases depend on, then move into the sensitive pipeline code, then convenience.
 
 These already exist and the roadmap builds on them rather than reinventing:
 
-- Rich per-frame stats already collected in `_VIDEO_STATS`
+- Rich per-frame stats collected in `_VIDEO_STATS`
   ([decoder.h:11](../app/streaming/video/decoder.h#L11)): decode/pacer/render/
   reassembly times (µs), RTT + RTT variance (jitter), and dropped frames split
-  by cause (`networkDroppedFrames` vs `pacerDroppedFrames`). **The data for
-  automatic diagnosis is already there — today it is only shown as raw numbers.**
+  by cause (`networkDroppedFrames` vs `pacerDroppedFrames`). Phase 0 now turns
+  these raw counters into a diagnosis and retains a short spike history.
 - A real frame pacer with per-platform vsync sources
   ([ffmpeg-renderers/pacer/](../app/streaming/video/ffmpeg-renderers/pacer/):
   `dxvsyncsource`, `waylandvsyncsource`).
@@ -63,13 +64,17 @@ per-second stats flip in `ffmpeg.cpp`.
   verdict + key metric are appended beneath the existing raw numbers
   (`appendDiagnosisText`). The detailed overlay is untouched.
 - **0.3 — Spike history ring buffer.** ✅ `Diagnostics::SpikeHistory` keeps ~5
-  min of per-second diagnoses and summarizes them ("3 spike(s) in last ~5 min
-  (mostly network)") in the overlay.
+  min of per-second diagnoses and counts transitions into a bottleneck as spike
+  events, rather than incorrectly counting every affected second as a new spike.
+- **0.4 — Automated regression suite.** ✅ QtTest coverage verifies healthy
+  VSync timing, decode, render queue, packet loss, RTT jitter, host latency,
+  insufficient samples, spike grouping, and translated overlay formatting.
+  The Linux CI runs this suite on every push and pull request.
 
-Classifier logic validated standalone against synthetic windows for every
-bottleneck class (decode-heavy, decode-shortfall, network, pacing, host,
-too-few-frames, and the spike summary). Pipeline runtime validation still
-pending a working local build (Qt6 link env).
+The classifier no longer treats one normal frame budget spent in render+VSync
+as a presentation failure. Pacer drops are attributed to network or local
+presentation using independent packet-loss/RTT-variance signals, and persistent
+queue delay is scored separately. The local build and CI both pass.
 
 **Acceptance:** with a deliberately under-powered decode setting, the overlay
 names "decode-bound"; with an artificially jittery link (tc/netem), it names
@@ -79,7 +84,7 @@ names "decode-bound"; with an artificially jittery link (tc/netem), it names
 
 ---
 
-## Phase 1 — Auto-config & presets (Fast / Balanced / Quality / Battery)  🔶 PARTIAL
+## Phase 1 — Auto-config & presets (Fast / Balanced / Quality / Battery)  ✅ DONE
 
 **Why second:** *"manual config of bitrate/resolution/FPS/codec is confusing"*
 and *"no presets."* Depends on Phase 0 to validate that a chosen preset actually
@@ -97,8 +102,7 @@ behaves, and on a one-time decode probe.
   Battery Saver / Custom) in video settings. `StreamingPreferences::applyPreset`
   derives res/fps from the native display mode and bitrate from
   `getDefaultBitrate` scaled per preset; the GUI picks the best HW-decodable
-  codec via the 1.1 probe. Reverts to "Custom" on any manual edit. (Hermes
-  `limits` not yet consulted — see below.)
+  codec via the 1.1 probe. Reverts to "Custom" on any manual edit.
 - **1.3 — Handheld power profile.** ✅ The "Battery Saver" preset (720p30,
   reduced bitrate) is now hidden on non-handheld builds: `SystemProperties`
   exposes `isHandheld` (Steam Deck DMI `Jupiter`/`Galileo`, the `SteamDeck` env
@@ -111,10 +115,17 @@ behaves, and on a one-time decode probe.
   exposes `saveActivePreset`/`loadActivePreset`; the settings view restores the
   machine's last preset on open, saves on change, and clears to Custom on any
   manual edit. A laptop and a Deck remember different choices.
+- **1.5 — Hermes-aware effective mode.** ✅ Before decoder selection, Hestia
+  intersects the host's codec list and clamps preset resolution/FPS to Hermes
+  `limits`. If a preset is clamped, bitrate is recalculated while preserving
+  that preset's quality ratio. Custom bitrates remain untouched. A host/client
+  combination with no common codec now fails clearly instead of violating the
+  contract with an unconditional H.264 fallback.
 
-Preset resolution/fps/bitrate math validated standalone across 4K/120, 1080p60,
-Steam Deck 1280x800/90, and 1440p/144. Runtime validation of the GUI flow still
-pending a working local build (Qt6 link env).
+Preset and negotiation math is covered for 4K/120, ultrawide, Steam Deck
+1280x800/90, host clamping, custom bitrate preservation, and protocol evolution.
+Preset resolution caps now fit both width and height instead of relying only on
+pixel count.
 
 **Acceptance:** fresh install → one preset click yields a stream Phase 0 rates
 as healthy; the probe correctly rejects a codec that software-falls-back.
@@ -265,19 +276,18 @@ specific, correct next step.
 
 - **Every pipeline phase (2–6) must be regression-gated by Phase 0 telemetry** —
   no "feels smoother" merges without a frame-time / dropped-frame delta.
-- **Local build currently fails at link** (Qt6 ABI env issue, pre-existing and
-  unrelated to source). Pipeline phases need a working runtime to validate;
-  fixing the build env is an implicit prerequisite for Phases 2–6.
+- The local Qt6 build and Linux/Arch CI are working. Pipeline phases must keep
+  the client-logic suite green and add hardware/runtime evidence where required.
 - Items already shipped this cycle (OTP/DeepLink pairing, clipboard sync,
   capabilities forward-compat) are **not** in this roadmap; it is forward-looking
   only.
 
 ## Progress
 
-- ✅ **Phase 0** — Telemetry foundation & diagnosis engine (0.1, 0.2, 0.3).
-- 🔶 **Phase 1** — Auto-config & presets. Done: 1.1 (capability probe), 1.2
-  (preset selector), 1.3 (handheld-gated Battery preset), 1.4 (per-device
-  preset memory). Remaining: consulting Hermes `limits` as a preset ceiling.
-- ⏭️ **Next:** wire Hermes `limits` into preset clamping to close Phase 1, or
-  move to **Phase 2** (frame pacing) — the first deep-pipeline phase, which
-  really wants a working runtime to validate.
+- ✅ **Phase 0** — Telemetry, diagnosis, translated overlay, spike history, and
+  automated regression coverage (0.1–0.4).
+- ✅ **Phase 1** — Capability probe, presets, handheld Battery mode, per-device
+  memory, and Hermes-aware mode/bitrate/codec negotiation (1.1–1.5).
+- 🔶 **Phase 2** — 2.1 fractional refresh handling is implemented. Next:
+  instrument queue depth/latency distributions, collect 10-minute X11/Wayland
+  baselines, then use those measurements to design 2.2 adaptive queue tuning.

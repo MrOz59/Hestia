@@ -68,4 +68,7 @@ private:
     int m_Head = 0;    // next write position
 };
 
+// Produces the translated text appended to the debug overlay.
+QString formatOverlayText(const Diagnosis& diagnosis, const SpikeHistory& history);
+
 } // namespace Diagnostics

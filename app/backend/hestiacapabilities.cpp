@@ -60,15 +60,6 @@ bool readPositiveInteger(const QJsonObject& object, const QString& key, int* val
     return true;
 }
 
-bool readFixedInteger(const QJsonObject& object, const QString& key, int expected, QString* error)
-{
-    const QJsonValue jsonValue = object.value(key);
-    if (!jsonValue.isDouble() || jsonValue.toDouble() != expected) {
-        return fail(error, key + " is incompatible");
-    }
-    return true;
-}
-
 bool readFixedString(const QJsonObject& object, const QString& key, const QString& expected, QString* error)
 {
     const QJsonValue jsonValue = object.value(key);
@@ -78,11 +69,11 @@ bool readFixedString(const QJsonObject& object, const QString& key, const QStrin
     return true;
 }
 
-bool readStringArray(const QJsonObject& object,
-                     const QString& key,
-                     const QSet<QString>& allowedValues,
-                     QStringList* values,
-                     QString* error)
+bool readKnownStringArray(const QJsonObject& object,
+                          const QString& key,
+                          const QSet<QString>& knownValues,
+                          QStringList* values,
+                          QString* error)
 {
     const QJsonValue jsonValue = object.value(key);
     if (!jsonValue.isArray()) {
@@ -92,11 +83,13 @@ bool readStringArray(const QJsonObject& object,
     QSet<QString> seen;
     QStringList parsedValues;
     for (const QJsonValue& item : jsonValue.toArray()) {
-        if (!item.isString() || !allowedValues.contains(item.toString()) || seen.contains(item.toString())) {
+        if (!item.isString() || seen.contains(item.toString())) {
             return fail(error, key + " contains an invalid value");
         }
         seen.insert(item.toString());
-        parsedValues.append(item.toString());
+        if (knownValues.contains(item.toString())) {
+            parsedValues.append(item.toString());
+        }
     }
 
     *values = parsedValues;
@@ -151,12 +144,20 @@ bool HestiaCapabilities::fromJson(const QJsonObject& response, HestiaCapabilitie
         return fail(error, "ok must be true");
     }
 
+    int hestiaProtocol;
+    int minClientProtocol;
+    int maxClientProtocol;
     if (!readFixedString(response, "server_name", "Hermes", error) ||
             !readFixedString(response, "base", "Apollo", error) ||
-            !readFixedInteger(response, "hestia_protocol", 1, error) ||
-            !readFixedInteger(response, "min_client_protocol", 1, error) ||
-            !readFixedInteger(response, "max_client_protocol", 1, error)) {
+            !readPositiveInteger(response, "hestia_protocol", &hestiaProtocol, error) ||
+            !readPositiveInteger(response, "min_client_protocol", &minClientProtocol, error) ||
+            !readPositiveInteger(response, "max_client_protocol", &maxClientProtocol, error)) {
         return false;
+    }
+    if (minClientProtocol > maxClientProtocol ||
+            minClientProtocol > 1 ||
+            maxClientProtocol < 1) {
+        return fail(error, "Hermes does not support Hestia client protocol v1");
     }
 
     if (!response.value("server_version").isString() || response.value("server_version").toString().isEmpty()) {
@@ -171,9 +172,9 @@ bool HestiaCapabilities::fromJson(const QJsonObject& response, HestiaCapabilitie
     parsed.supportsProtocolV1 = true;
     parsed.serverName = response.value("server_name").toString();
     parsed.base = response.value("base").toString();
-    parsed.hestiaProtocol = 1;
-    parsed.minClientProtocol = 1;
-    parsed.maxClientProtocol = 1;
+    parsed.hestiaProtocol = hestiaProtocol;
+    parsed.minClientProtocol = minClientProtocol;
+    parsed.maxClientProtocol = maxClientProtocol;
     parsed.serverVersion = response.value("server_version").toString();
 
     const QJsonObject compatibility = response.value("compatibility").toObject();
@@ -193,7 +194,7 @@ bool HestiaCapabilities::fromJson(const QJsonObject& response, HestiaCapabilitie
     };
     if (!hasRequiredKeys(features, featureKeys, error, "features") ||
             !readBool(features, "virtual_display", &parsed.features.virtualDisplay, error) ||
-            !readStringArray(features, "virtual_display_backend", {"evdi", "hermes_kms"}, &parsed.features.virtualDisplayBackend, error) ||
+            !readKnownStringArray(features, "virtual_display_backend", {"evdi", "hermes_kms"}, &parsed.features.virtualDisplayBackend, error) ||
             !readBool(features, "kde_kscreen", &parsed.features.kdeKscreen, error) ||
             !readBool(features, "display_recovery", &parsed.features.displayRecovery, error) ||
             !readBool(features, "client_resolution_matching", &parsed.features.clientResolutionMatching, error) ||
@@ -218,7 +219,7 @@ bool HestiaCapabilities::fromJson(const QJsonObject& response, HestiaCapabilitie
             !readPositiveInteger(limits, "max_height", &parsed.limits.maxHeight, error) ||
             !readPositiveInteger(limits, "max_fps", &parsed.limits.maxFps, error) ||
             !readPositiveIntegerArray(limits, "supported_fps", &parsed.limits.supportedFps, error) ||
-            !readStringArray(limits, "supported_codecs", {"h264", "hevc", "av1"}, &parsed.limits.supportedCodecs, error)) {
+            !readKnownStringArray(limits, "supported_codecs", {"h264", "hevc", "av1"}, &parsed.limits.supportedCodecs, error)) {
         return false;
     }
 

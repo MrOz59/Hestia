@@ -64,6 +64,14 @@ jobs:
       - name: Configure (qmake6)
         run: qmake6 moonlight-qt.pro
 
+      - name: Configure client logic tests
+        working-directory: tests
+        run: qmake6 clientlogic.pro
+
+      - name: Run client logic tests
+        working-directory: tests
+        run: make check -j"$(nproc)"
+
       - name: Build (make release)
         run: make release -j"$(nproc)"
 

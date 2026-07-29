@@ -1,6 +1,7 @@
 #include "session.h"
 #include "settings/streamingpreferences.h"
 #include "streaming/streamutils.h"
+#include "streaming/hestianegotiation.h"
 #include "backend/richpresencemanager.h"
 #include "backend/hestiacapabilities.h"
 
@@ -690,75 +691,53 @@ void Session::applyHestiaHostLimits()
     }
 
     const HestiaLimits& limits = m_Computer->hestiaCapabilities.limits;
-    const int requestedWidth = m_StreamConfig.width;
-    const int requestedHeight = m_StreamConfig.height;
-    const int requestedFps = m_StreamConfig.fps;
+    const HestiaNegotiation::StreamMode requested {
+        m_StreamConfig.width,
+        m_StreamConfig.height,
+        m_StreamConfig.fps,
+        m_StreamConfig.bitrate,
+    };
+    const bool presetActive =
+            m_Preferences->loadActivePreset() != StreamingPreferences::PRESET_CUSTOM;
+    const HestiaNegotiation::Result negotiation =
+            HestiaNegotiation::negotiateStreamMode(requested,
+                                                   limits,
+                                                   presetActive,
+                                                   m_Preferences->enableYUV444);
 
-    if (limits.maxWidth > 0 && limits.maxHeight > 0 &&
-            (requestedWidth > limits.maxWidth || requestedHeight > limits.maxHeight)) {
-        const double scale = qMin(static_cast<double>(limits.maxWidth) / requestedWidth,
-                                  static_cast<double>(limits.maxHeight) / requestedHeight);
-        int negotiatedWidth = qMax(1, qFloor(requestedWidth * scale));
-        int negotiatedHeight = qMax(1, qFloor(requestedHeight * scale));
+    m_StreamConfig.width = negotiation.effective.width;
+    m_StreamConfig.height = negotiation.effective.height;
+    m_StreamConfig.fps = negotiation.effective.fps;
+    m_StreamConfig.bitrate = negotiation.effective.bitrateKbps;
 
-        // Video encoders generally require even dimensions. Round down so the
-        // negotiated size remains within the host's advertised ceiling.
-        if (negotiatedWidth > 1) {
-            negotiatedWidth &= ~1;
-        }
-        if (negotiatedHeight > 1) {
-            negotiatedHeight &= ~1;
-        }
-
-        m_StreamConfig.width = negotiatedWidth;
-        m_StreamConfig.height = negotiatedHeight;
+    if (negotiation.resolutionAdjusted) {
         emitLaunchWarning(tr("Hermes supports streams up to %1x%2. Hestia adjusted this session from %3x%4 to %5x%6.")
                               .arg(limits.maxWidth)
                               .arg(limits.maxHeight)
-                              .arg(requestedWidth)
-                              .arg(requestedHeight)
-                              .arg(negotiatedWidth)
-                              .arg(negotiatedHeight));
+                              .arg(negotiation.requested.width)
+                              .arg(negotiation.requested.height)
+                              .arg(negotiation.effective.width)
+                              .arg(negotiation.effective.height));
     }
 
-    int negotiatedFps = requestedFps;
-    int highestSupportedFps = 0;
-    int lowestSupportedFpsAboveRequest = 0;
-    for (const int supportedFps : limits.supportedFps) {
-        if (limits.maxFps > 0 && supportedFps > limits.maxFps) {
-            continue;
-        }
-
-        if (supportedFps <= requestedFps) {
-            highestSupportedFps = qMax(highestSupportedFps, supportedFps);
-        }
-        else if (lowestSupportedFpsAboveRequest == 0 || supportedFps < lowestSupportedFpsAboveRequest) {
-            lowestSupportedFpsAboveRequest = supportedFps;
-        }
-    }
-
-    if (highestSupportedFps > 0) {
-        negotiatedFps = highestSupportedFps;
-    }
-    else if (lowestSupportedFpsAboveRequest > 0) {
-        negotiatedFps = lowestSupportedFpsAboveRequest;
-    }
-    else if (limits.maxFps > 0) {
-        negotiatedFps = qMin(requestedFps, limits.maxFps);
-    }
-
-    if (negotiatedFps != requestedFps) {
-        m_StreamConfig.fps = negotiatedFps;
+    if (negotiation.fpsAdjusted) {
         emitLaunchWarning(tr("Hermes does not accept %1 FPS. Hestia adjusted this session to %2 FPS.")
-                              .arg(requestedFps)
-                              .arg(negotiatedFps));
+                              .arg(negotiation.requested.fps)
+                              .arg(negotiation.effective.fps));
+    }
+
+    if (negotiation.bitrateAdjusted) {
+        emitLaunchWarning(tr("Hestia adjusted the active preset bitrate from %1 Mbps to %2 Mbps for the Hermes-negotiated stream mode.")
+                              .arg(negotiation.requested.bitrateKbps / 1000.0, 0, 'f', 1)
+                              .arg(negotiation.effective.bitrateKbps / 1000.0, 0, 'f', 1));
     }
 
     SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
-                "Hermes-negotiated stream mode: %dx%d at %d FPS",
+                "Hermes-negotiated stream mode: %dx%d at %d FPS and %d kbps",
                 m_StreamConfig.width,
                 m_StreamConfig.height,
-                m_StreamConfig.fps);
+                m_StreamConfig.fps,
+                m_StreamConfig.bitrate);
 }
 
 void Session::applyHestiaCodecLimits()
@@ -1454,8 +1433,15 @@ bool Session::validateLaunch(SDL_Window* testWindow)
         emitLaunchWarning(tr("An attached gamepad has no mapping and won't be usable. Visit the Moonlight help to resolve this."));
     }
 
-    // If we removed all codecs with the checks above, use H.264 as the codec of last resort.
+    // If Hermes advertised codecs and none survived host/client validation,
+    // falling back to H.264 would violate the negotiated host contract.
     if (m_SupportedVideoFormats.empty()) {
+        if (m_Computer->hestiaCapabilities.supportsProtocolV1) {
+            emit displayLaunchError(tr("Hermes and this client do not share a usable video codec for the selected settings."));
+            return false;
+        }
+
+        // Legacy hosts retain Moonlight's H.264 codec of last resort.
         m_SupportedVideoFormats.append(VIDEO_FORMAT_H264);
     }
 

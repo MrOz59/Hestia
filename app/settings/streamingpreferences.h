@@ -14,6 +14,14 @@ public:
     Q_INVOKABLE static int
     getDefaultBitrate(int width, int height, int fps, bool yuv444);
 
+    struct PresetConfiguration
+    {
+        int width;
+        int height;
+        int fps;
+        int bitrateKbps;
+    };
+
     // Quality presets (roadmap Phase 1.2). PRESET_CUSTOM means the user has set
     // values manually and no preset is active.
     enum StreamingPreset
@@ -25,6 +33,24 @@ public:
         PRESET_BATTERY,   // minimal resolution/fps/bitrate for handhelds
     };
     Q_ENUM(StreamingPreset)
+
+    // Pure preset calculation used by the GUI and unit tests.
+    static PresetConfiguration calculatePreset(StreamingPreset preset,
+                                                int nativeWidth,
+                                                int nativeHeight,
+                                                int nativeFps,
+                                                bool yuv444);
+
+    // Preserve the user's quality/bitrate ratio when a host negotiates a
+    // different resolution or frame rate for an active preset.
+    static int scaleBitrateForMode(int bitrateKbps,
+                                   int sourceWidth,
+                                   int sourceHeight,
+                                   int sourceFps,
+                                   int targetWidth,
+                                   int targetHeight,
+                                   int targetFps,
+                                   bool yuv444);
 
     // Applies a preset's resolution, frame rate, and bitrate, derived from the
     // display's native resolution/refresh passed in by the caller (the GUI knows

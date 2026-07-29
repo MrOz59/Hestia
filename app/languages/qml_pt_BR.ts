@@ -663,6 +663,108 @@
         <source>Unable to initialize video decoder. Please check your streaming settings and try again.</source>
         <translation>Não é possível inicializar o decodificador de vídeo. Verifique suas configurações de streaming e tente novamente.</translation>
     </message>
+    <message>
+        <source>Hermes supports streams up to %1x%2. Hestia adjusted this session from %3x%4 to %5x%6.</source>
+        <translation>O Hermes suporta transmissões de até %1x%2. O Hestia ajustou esta sessão de %3x%4 para %5x%6.</translation>
+    </message>
+    <message>
+        <source>Hermes does not accept %1 FPS. Hestia adjusted this session to %2 FPS.</source>
+        <translation>O Hermes não aceita %1 FPS. O Hestia ajustou esta sessão para %2 FPS.</translation>
+    </message>
+    <message>
+        <source>Hestia adjusted the active preset bitrate from %1 Mbps to %2 Mbps for the Hermes-negotiated stream mode.</source>
+        <translation>O Hestia ajustou a taxa de bits do preset ativo de %1 Mbps para %2 Mbps para o modo negociado com o Hermes.</translation>
+    </message>
+    <message>
+        <source>Hermes and this client do not share a usable video codec for the selected settings.</source>
+        <translation>O Hermes e este cliente não têm um codec de vídeo compatível para as configurações selecionadas.</translation>
+    </message>
+</context>
+<context>
+    <name>HestiaDiagnostics</name>
+    <message>
+        <source>Stream is healthy.</source>
+        <translation>A transmissão está saudável.</translation>
+    </message>
+    <message>
+        <source>Your decoder is falling behind. Try a lighter codec (e.g. HEVC to H.264) or lower the resolution or frame rate.</source>
+        <translation>O decodificador está atrasado. Tente um codec mais leve (por exemplo, trocar HEVC por H.264) ou reduza a resolução ou a taxa de quadros.</translation>
+    </message>
+    <message>
+        <source>decode %1 ms/frame</source>
+        <translation>decodificação %1 ms/quadro</translation>
+    </message>
+    <message>
+        <source>Frames are being delayed during presentation. Check V-Sync and that the display refresh rate matches the stream.</source>
+        <translation>Os quadros estão atrasando durante a apresentação. Verifique o V-Sync e se a taxa de atualização da tela corresponde à transmissão.</translation>
+    </message>
+    <message>
+        <source>%1% pacing drops</source>
+        <translation>%1% de descartes de sincronização</translation>
+    </message>
+    <message>
+        <source>queue %1 ms/frame</source>
+        <translation>fila %1 ms/quadro</translation>
+    </message>
+    <message>
+        <source>render %1 ms/frame</source>
+        <translation>renderização %1 ms/quadro</translation>
+    </message>
+    <message>
+        <source>Your network is dropping or delaying frames. Lower the bitrate or move closer to the access point / use a wired connection.</source>
+        <translation>A rede está descartando ou atrasando quadros. Reduza a taxa de bits, aproxime-se do ponto de acesso ou use uma conexão cabeada.</translation>
+    </message>
+    <message>
+        <source>%1% network drops</source>
+        <translation>%1% de perdas de rede</translation>
+    </message>
+    <message>
+        <source>RTT variance %1 ms</source>
+        <translation>variação de RTT %1 ms</translation>
+    </message>
+    <message>
+        <source>The host is slow to produce frames. This is a server-side bottleneck, not your client.</source>
+        <translation>O host está demorando para produzir quadros. O gargalo está no servidor, não no cliente.</translation>
+    </message>
+    <message>
+        <source>host %1 ms/frame</source>
+        <translation>host %1 ms/quadro</translation>
+    </message>
+    <message>
+        <source>mostly decode</source>
+        <translation>principalmente decodificação</translation>
+    </message>
+    <message>
+        <source>mostly pacing</source>
+        <translation>principalmente sincronização</translation>
+    </message>
+    <message>
+        <source>mostly network</source>
+        <translation>principalmente rede</translation>
+    </message>
+    <message>
+        <source>mostly host</source>
+        <translation>principalmente host</translation>
+    </message>
+    <message>
+        <source>mixed</source>
+        <translation>misto</translation>
+    </message>
+    <message numerus="yes">
+        <source>%n spike(s) in last ~%1 min (%2)</source>
+        <translation>
+            <numerusform>%n pico nos últimos ~%1 min (%2)</numerusform>
+            <numerusform>%n picos nos últimos ~%1 min (%2)</numerusform>
+        </translation>
+    </message>
+    <message>
+        <source>Diagnosis: %1</source>
+        <translation>Diagnóstico: %1</translation>
+    </message>
+    <message>
+        <source>Diagnosis: %1 (%2)</source>
+        <translation>Diagnóstico: %1 (%2)</translation>
+    </message>
 </context>
 <context>
     <name>SettingsView</name>

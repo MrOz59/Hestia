@@ -15,4 +15,5 @@ SOURCES += \
     ../app/backend/hestiacapabilities.cpp \
     ../app/settings/presetconfiguration.cpp \
     ../app/streaming/hestianegotiation.cpp \
+    ../app/streaming/video/ffmpeg-renderers/pacer/pacingpolicy.cpp \
     ../app/streaming/video/statsdiagnostics.cpp

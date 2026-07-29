@@ -3,6 +3,7 @@
 #include "backend/hestiacapabilities.h"
 #include "settings/streamingpreferences.h"
 #include "streaming/hestianegotiation.h"
+#include "streaming/video/ffmpeg-renderers/pacer/pacingpolicy.h"
 #include "streaming/video/statsdiagnostics.h"
 
 #include <QJsonArray>
@@ -117,6 +118,16 @@ private slots:
                  Diagnostics::BOTTLENECK_RENDER);
     }
 
+    void diagnosticsClassifiesLateVsync()
+    {
+        VIDEO_STATS stats = healthyStats();
+        stats.vsyncIntervals = 60;
+        stats.lateVsyncIntervals = 3;
+        const Diagnostics::Diagnosis diagnosis = Diagnostics::diagnose(stats, 60);
+        QCOMPARE(diagnosis.dominant, Diagnostics::BOTTLENECK_RENDER);
+        QVERIFY(diagnosis.keyMetric.contains(QStringLiteral("V-Sync")));
+    }
+
     void diagnosticsClassifiesHost()
     {
         VIDEO_STATS stats = healthyStats();
@@ -167,8 +178,80 @@ private slots:
 
         QCOMPARE(QCoreApplication::translate("HestiaDiagnostics", "Diagnosis: %1"),
                  QStringLiteral("Diagnóstico: %1"));
+        QCOMPARE(QCoreApplication::translate("HestiaDiagnostics",
+                                             "%1% late V-Sync intervals"),
+                 QStringLiteral("%1% de intervalos de V-Sync atrasados"));
 
         QCoreApplication::removeTranslator(&translator);
+    }
+
+    void fractionalRefreshRateNormalization()
+    {
+        QCOMPARE(PacingPolicy::displayRateMillihertzFromSdlRate(59), 59940);
+        QCOMPARE(PacingPolicy::displayRateMillihertzFromSdlRate(119), 119880);
+        QCOMPARE(PacingPolicy::displayRateMillihertzFromSdlRate(143), 143856);
+        QCOMPARE(PacingPolicy::displayRateMillihertzFromSdlRate(120), 120000);
+        QCOMPARE(PacingPolicy::displayRateMillihertzFromSdlRate(0), 60000);
+        QCOMPARE(PacingPolicy::rendererPresentationRateMillihertz(60000, 30),
+                 30000);
+        QCOMPARE(PacingPolicy::rendererPresentationRateMillihertz(59940, 60),
+                 59940);
+    }
+
+    void adaptiveQueueRaisesQuicklyForJitter()
+    {
+        PacingPolicy::AdaptiveQueueDepth queueDepth;
+        queueDepth.configure(60000);
+        QCOMPARE(queueDepth.targetDepth(), 2);
+
+        for (int i = 0; i < 14; i++) {
+            queueDepth.observeNetworkJitter(20);
+        }
+        QCOMPARE(queueDepth.targetDepth(), 2);
+
+        queueDepth.observeNetworkJitter(20);
+        QCOMPARE(queueDepth.targetDepth(), 3);
+    }
+
+    void adaptiveQueueRejectsTransientJitter()
+    {
+        PacingPolicy::AdaptiveQueueDepth queueDepth;
+        queueDepth.configure(120000);
+
+        for (int i = 0; i < 29; i++) {
+            queueDepth.observeNetworkJitter(20);
+        }
+        queueDepth.observeNetworkJitter(6);
+        QCOMPARE(queueDepth.targetDepth(), 2);
+    }
+
+    void adaptiveQueueLowersSlowlyOnStableNetwork()
+    {
+        PacingPolicy::AdaptiveQueueDepth queueDepth;
+        queueDepth.configure(60000);
+
+        for (int i = 0; i < 119; i++) {
+            queueDepth.observeNetworkJitter(2);
+        }
+        QCOMPARE(queueDepth.targetDepth(), 2);
+
+        queueDepth.observeNetworkJitter(2);
+        QCOMPARE(queueDepth.targetDepth(), 1);
+    }
+
+    void adaptiveQueueUsesRendererPresentationRate()
+    {
+        PacingPolicy::AdaptiveQueueDepth queueDepth;
+        queueDepth.configure(
+                PacingPolicy::rendererPresentationRateMillihertz(120000, 30));
+
+        for (int i = 0; i < 7; i++) {
+            queueDepth.observeNetworkJitter(20);
+        }
+        QCOMPARE(queueDepth.targetDepth(), 2);
+
+        queueDepth.observeNetworkJitter(20);
+        QCOMPARE(queueDepth.targetDepth(), 3);
     }
 
     void qualityPresetUsesNativeMode()

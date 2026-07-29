@@ -703,6 +703,10 @@
         <translation>%1% de descartes de sincronização</translation>
     </message>
     <message>
+        <source>%1% late V-Sync intervals</source>
+        <translation>%1% de intervalos de V-Sync atrasados</translation>
+    </message>
+    <message>
         <source>queue %1 ms/frame</source>
         <translation>fila %1 ms/quadro</translation>
     </message>

@@ -1,4 +1,5 @@
 #include "streamutils.h"
+#include "video/ffmpeg-renderers/pacer/pacingpolicy.h"
 
 #include <Qt>
 #include <QDir>
@@ -212,22 +213,8 @@ int StreamUtils::getDisplayRefreshRate(SDL_Window* window)
 
 int StreamUtils::getDisplayRefreshRateMillihertz(SDL_Window* window)
 {
-    int rate = getActiveDisplayRefreshRate(window);
-
-    // SDL2 only exposes an integer refresh rate, so the common NTSC-derived
-    // fractional modes are truncated (60000/1001 = 59.94 -> 59, etc.). When the
-    // truncated value matches one of these, the panel is almost certainly
-    // running the fractional rate, so reconstruct the precise millihertz value.
-    // Anything else is treated as an exact integer rate.
-    switch (rate) {
-    case 23: return 23976;   // 24000/1001
-    case 29: return 29970;   // 30000/1001
-    case 47: return 47952;   // 48000/1001
-    case 59: return 59940;   // 60000/1001
-    case 119: return 119880; // 120000/1001
-    case 143: return 143856; // 144000/1001
-    default: return rate * 1000;
-    }
+    return PacingPolicy::displayRateMillihertzFromSdlRate(
+            getActiveDisplayRefreshRate(window));
 }
 
 bool StreamUtils::hasFastAes()

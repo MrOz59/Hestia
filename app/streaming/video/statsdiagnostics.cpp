@@ -35,6 +35,8 @@ const double QUEUE_BUDGET_MULTIPLIER = 2.0;
 // are more likely network jitter than a local presentation problem.
 const double RTT_VARIANCE_HIGH_MS = 10.0;
 
+const double VSYNC_LATE_PERCENT_THRESHOLD = 2.0;
+
 // Host processing latency (server side) considered high, in milliseconds.
 const double HOST_LATENCY_HIGH_MS = 30.0;
 
@@ -75,6 +77,8 @@ Diagnosis diagnose(const VIDEO_STATS& stats, int targetFps)
 
     const double networkDropPct = dropPercent(stats.networkDroppedFrames, stats.totalFrames);
     const double pacerDropPct = dropPercent(stats.pacerDroppedFrames, stats.decodedFrames);
+    const double lateVsyncPct =
+            dropPercent(stats.lateVsyncIntervals, stats.vsyncIntervals);
 
     const double avgHostMs = stats.framesWithHostProcessingLatency > 0
             ? (stats.totalHostProcessingLatency / 10.0) / stats.framesWithHostProcessingLatency
@@ -89,6 +93,8 @@ Diagnosis diagnose(const VIDEO_STATS& stats, int targetFps)
     double networkScore = qMax(networkDropScore, jitterScore);
     double renderScore = qMax(renderMs / (frameBudgetMs * RENDER_BUDGET_FRACTION),
                               queueMs / (frameBudgetMs * QUEUE_BUDGET_MULTIPLIER));
+    renderScore = qMax(renderScore,
+                       lateVsyncPct / VSYNC_LATE_PERCENT_THRESHOLD);
     double decodeScore = decodeMs / (frameBudgetMs * DECODE_BUDGET_FRACTION);
     double hostScore = avgHostMs / HOST_LATENCY_HIGH_MS;
 
@@ -135,6 +141,10 @@ Diagnosis diagnose(const VIDEO_STATS& stats, int targetFps)
                                          "and that the display refresh rate matches the stream.");
         if (pacerDropPct >= DROP_PERCENT_THRESHOLD) {
             result.keyMetric = Translation::tr("%1% pacing drops").arg(pacerDropPct, 0, 'f', 1);
+        }
+        else if (lateVsyncPct >= VSYNC_LATE_PERCENT_THRESHOLD) {
+            result.keyMetric = Translation::tr("%1% late V-Sync intervals")
+                    .arg(lateVsyncPct, 0, 'f', 1);
         }
         else if (queueMs >= frameBudgetMs * QUEUE_BUDGET_MULTIPLIER) {
             result.keyMetric = Translation::tr("queue %1 ms/frame").arg(queueMs, 0, 'f', 1);

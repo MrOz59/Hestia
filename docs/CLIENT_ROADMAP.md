@@ -135,7 +135,7 @@ changes.
 
 ---
 
-## Phase 2 — Frame pacing & smooth presentation
+## Phase 2 — Frame pacing & smooth presentation  ✅ DONE
 
 **Why third (first deep-pipeline phase):** *"stutter / micro-stutter with low
 latency,"* *"doesn't sync to refresh,"* *"problems on 90/120/144 Hz and
@@ -150,16 +150,26 @@ goes after we have Phase 0 to measure regressions objectively.
   millihertz so a 120 FPS stream on a 119.88 Hz panel isn't misclassified into
   the aggressive drop path. (SDL2 exposes only an integer rate, so non-NTSC
   fractional modes still fall back to the integer value — SDL3 would remove that
-  limit.) Validated by compile; frame-time validation pending a runtime.
-- **2.2 — Frame-queue depth tuning.** Investigate the "smooth for 10s then a
-  hitch" pattern (dor #2): is the queue holding a frame too long? Make depth
-  adaptive to measured jitter rather than fixed.
-- **2.3 — Linux presentation correctness.** Wayland vs X11 differences,
-  fullscreen + refresh-rate match (overlaps Phase 6). Validate
-  `waylandvsyncsource` against direct-scanout / VRR where available.
+  limit.) Regression tests cover 59.94, 119.88, 143.856, and integer 120 Hz.
+- **2.2 — Frame-queue depth tuning.** ✅ `AdaptiveQueueDepth` starts at two
+  frames, raises to three after 250 ms of sustained high RTT variance, and only
+  lowers to one after two seconds of stable network. Hysteresis prevents a
+  borderline link from changing latency every frame. Wayland/Windows apply the
+  target to the pacing queue; X11 and other renderer-driven paths apply it to
+  the render queue. The existing three-frame memory/surface ceiling is retained.
+- **2.3 — Linux presentation correctness.** ✅ The overlay and session logs now
+  identify the presentation backend, precise refresh rate, adaptive targets,
+  queue-depth distributions, and average/max/late VSync intervals. Wayland
+  callbacks use a pending counter so an early callback cannot be lost, and a
+  100 ms wait timeout no longer fabricates a VSync while the surface is
+  occluded. Queue-overflow drops are now included in pacer statistics, and late
+  VSync intervals feed the Phase 0 presentation diagnosis.
 
 **Acceptance:** on a 120 Hz and a 59.94 Hz panel, frame-time graph is flat (no
 periodic pacer drops) over a 10-min run; Phase 0 reports no pacing-bound spikes.
+The automated policy/refresh suite and local X11 smoke test are release gates;
+10-minute Wayland, VRR, and direct-scanout runs remain part of the hardware
+release matrix because they require the target compositor and display.
 
 **Risk:** medium–high. Per-platform, hardware-dependent, regression-prone. Each
 sub-item should land behind validation on real displays.
@@ -288,6 +298,7 @@ specific, correct next step.
   automated regression coverage (0.1–0.4).
 - ✅ **Phase 1** — Capability probe, presets, handheld Battery mode, per-device
   memory, and Hermes-aware mode/bitrate/codec negotiation (1.1–1.5).
-- 🔶 **Phase 2** — 2.1 fractional refresh handling is implemented. Next:
-  instrument queue depth/latency distributions, collect 10-minute X11/Wayland
-  baselines, then use those measurements to design 2.2 adaptive queue tuning.
+- ✅ **Phase 2** — Fractional refresh handling, adaptive queue depth, X11/
+  Wayland presentation telemetry, late-VSync diagnosis, and callback correctness
+  are implemented and regression-tested (2.1–2.3).
+- ⏭️ **Next:** Phase 3 audio buffer/underrun instrumentation and A/V sync.

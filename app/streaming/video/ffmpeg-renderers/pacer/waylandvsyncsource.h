@@ -16,6 +16,8 @@ public:
 
     virtual bool isAsync() override;
 
+    virtual const char* name() const override;
+
 private:
     static void frameDone(void* data, struct wl_callback* oldCb, uint32_t time);
 
@@ -26,4 +28,3 @@ private:
     wl_surface* m_Surface;
     wl_callback* m_Callback;
 };
-

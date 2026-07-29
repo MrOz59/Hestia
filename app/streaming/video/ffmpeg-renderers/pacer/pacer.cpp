@@ -34,6 +34,11 @@ Pacer::Pacer(IFFmpegRenderer* renderer, PVIDEO_STATS videoStats) :
     m_VsyncThread(nullptr),
     m_DeferredFreeFrame(nullptr),
     m_Stopping(false),
+    m_LastRtt(0),
+    m_LastRttVariance(0),
+    m_PendingVsyncs(0),
+    m_LastVsyncUs(0),
+    m_PacingEnabled(false),
     m_VsyncSource(nullptr),
     m_VsyncRenderer(renderer),
     m_MaxVideoFps(0),
@@ -115,10 +120,26 @@ int Pacer::vsyncThread(void *context)
     bool async = me->m_VsyncSource->isAsync();
     while (!me->m_Stopping) {
         if (async) {
-            // Wait for the VSync source to invoke signalVsync() or 100ms to elapse
+            // Wait for an actual callback. The pending counter avoids losing a
+            // callback that arrives just before wait() begins. A timeout is not
+            // treated as a synthetic VSync because Wayland intentionally stops
+            // frame callbacks for occluded surfaces.
+            bool receivedVsync = false;
             me->m_FrameQueueLock.lock();
-            me->m_VsyncSignalled.wait(&me->m_FrameQueueLock, 100);
+            while (!me->m_Stopping && me->m_PendingVsyncs == 0) {
+                if (!me->m_VsyncSignalled.wait(&me->m_FrameQueueLock, 100)) {
+                    break;
+                }
+            }
+            if (me->m_PendingVsyncs > 0) {
+                me->m_PendingVsyncs--;
+                receivedVsync = true;
+            }
             me->m_FrameQueueLock.unlock();
+
+            if (!receivedVsync) {
+                continue;
+            }
         }
         else {
             // Let the VSync source wait in the context of our thread
@@ -132,7 +153,11 @@ int Pacer::vsyncThread(void *context)
         // Microseconds per frame from the precise (fractional) display rate:
         // 1e9 / millihertz. Keeps 59.94/119.88 Hz panels from drifting versus a
         // rounded integer interval.
-        me->handleVsync((int)(1000000000LL / me->m_DisplayFpsMillihz));
+        const uint64_t nowUs = LiGetMicroseconds();
+        const uint64_t targetIntervalUs =
+                1000000000LL / me->m_DisplayFpsMillihz;
+        me->recordVsyncInterval(nowUs, targetIntervalUs);
+        me->handleVsync(static_cast<int>(targetIntervalUs));
     }
 
     return 0;
@@ -213,32 +238,13 @@ void Pacer::handleVsync(int timeUntilNextVsyncMicros)
 
     m_FrameQueueLock.lock();
 
-    // If the queue length history entries are large, be strict
-    // about dropping excess frames.
-    int frameDropTarget = 1;
-
-    // If we may get more frames per second than we can display, use
-    // frame history to drop frames only if consistently above the
-    // one queued frame mark. Compare in millihertz so a fractional panel
-    // (e.g. 120 FPS stream on a 119.88 Hz display) isn't misclassified by the
-    // integer refresh rate, which would trigger the aggressive drop path.
-    if ((int64_t)m_MaxVideoFps * 1000 >= m_DisplayFpsMillihz) {
-        for (int queueHistoryEntry : std::as_const(m_PacingQueueHistory)) {
-            if (queueHistoryEntry <= 1) {
-                // Be lenient as long as the queue length
-                // resolves before the end of frame history
-                frameDropTarget = 3;
-                break;
-            }
-        }
-
-        // Keep a rolling 500 ms window of pacing queue history
-        if (m_PacingQueueHistory.count() == m_DisplayFps / 2) {
-            m_PacingQueueHistory.dequeue();
-        }
-
-        m_PacingQueueHistory.enqueue(m_PacingQueue.count());
-    }
+    const int rttVarianceMs = m_LastRtt.load(std::memory_order_acquire) != 0
+            ? static_cast<int>(m_LastRttVariance.load(std::memory_order_relaxed))
+            : -1;
+    m_AdaptiveQueueDepth.observeNetworkJitter(rttVarianceMs);
+    const int frameDropTarget = m_AdaptiveQueueDepth.targetDepth();
+    m_VideoStats->pacingQueueTarget = frameDropTarget;
+    recordQueueDepth(m_VideoStats->pacingQueueDepth, m_PacingQueue.count());
 
     // Catch up if we're several frames ahead
     while (m_PacingQueue.count() > frameDropTarget) {
@@ -274,12 +280,14 @@ bool Pacer::initialize(SDL_Window* window, int maxVideoFps, bool enablePacing)
     m_MaxVideoFps = maxVideoFps;
     m_DisplayFps = StreamUtils::getDisplayRefreshRate(window);
     m_DisplayFpsMillihz = StreamUtils::getDisplayRefreshRateMillihertz(window);
+    m_PacingEnabled = enablePacing;
     m_RendererAttributes = m_VsyncRenderer->getRendererAttributes();
 
     if (enablePacing) {
         SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
-                    "Frame pacing: target %d Hz with %d FPS stream",
-                    m_DisplayFps, m_MaxVideoFps);
+                    "Frame pacing: target %.3f Hz with %d FPS stream",
+                    m_DisplayFpsMillihz / 1000.0,
+                    m_MaxVideoFps);
 
         SDL_SysWMinfo info;
         SDL_VERSION(&info.version);
@@ -320,9 +328,16 @@ bool Pacer::initialize(SDL_Window* window, int maxVideoFps, bool enablePacing)
     }
     else {
         SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
-                    "Frame pacing disabled: target %d Hz with %d FPS stream",
-                    m_DisplayFps, m_MaxVideoFps);
+                    "Frame pacing disabled: target %.3f Hz with %d FPS stream",
+                    m_DisplayFpsMillihz / 1000.0,
+                    m_MaxVideoFps);
     }
+
+    const int adaptiveSampleRateMillihertz = m_VsyncSource != nullptr
+            ? m_DisplayFpsMillihz
+            : PacingPolicy::rendererPresentationRateMillihertz(
+                    m_DisplayFpsMillihz, m_MaxVideoFps);
+    m_AdaptiveQueueDepth.configure(adaptiveSampleRateMillihertz);
 
     if (m_VsyncSource != nullptr) {
         m_VsyncThread = SDL_CreateThread(Pacer::vsyncThread, "PacerVsync", this);
@@ -332,12 +347,26 @@ bool Pacer::initialize(SDL_Window* window, int maxVideoFps, bool enablePacing)
         m_RenderThread = SDL_CreateThread(Pacer::renderThread, "PacerRender", this);
     }
 
+    SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
+                "Presentation path: %s (adaptive queue starts at %d frames)",
+                getPresentationPathName(),
+                m_AdaptiveQueueDepth.targetDepth());
+
     return true;
 }
 
 void Pacer::signalVsync()
 {
+    m_FrameQueueLock.lock();
+    m_PendingVsyncs++;
     m_VsyncSignalled.wakeOne();
+    m_FrameQueueLock.unlock();
+}
+
+void Pacer::updateNetworkJitter(uint32_t rttMs, uint32_t rttVarianceMs)
+{
+    m_LastRttVariance.store(rttVarianceMs, std::memory_order_relaxed);
+    m_LastRtt.store(rttMs, std::memory_order_release);
 }
 
 void Pacer::renderFrame(AVFrame* frame)
@@ -350,6 +379,14 @@ void Pacer::renderFrame(AVFrame* frame)
     m_VsyncRenderer->renderFrame(frame);
     uint64_t afterRender = LiGetMicroseconds();
 
+    if (m_VsyncSource == nullptr) {
+        const int presentationRateMillihertz =
+                PacingPolicy::rendererPresentationRateMillihertz(
+                        m_DisplayFpsMillihz, m_MaxVideoFps);
+        recordVsyncInterval(afterRender,
+                            1000000000LL / presentationRateMillihertz);
+    }
+
     m_VideoStats->totalRenderTimeUs += (afterRender - beforeRender);
     m_VideoStats->renderedFrames++;
 
@@ -361,6 +398,7 @@ void Pacer::renderFrame(AVFrame* frame)
 
     // Drop frames if we have too many queued up for a while
     m_FrameQueueLock.lock();
+    recordQueueDepth(m_VideoStats->renderQueueDepth, m_RenderQueue.count());
 
     int frameDropTarget;
 
@@ -368,6 +406,16 @@ void Pacer::renderFrame(AVFrame* frame)
         // Renderers that don't buffer any frames but don't support waitToRender() need us to buffer
         // an extra frame to ensure they don't starve while waiting to present.
         frameDropTarget = 1;
+    }
+    else if (m_VsyncSource == nullptr && m_PacingEnabled) {
+        // X11 and other renderer-driven paths have no separate pacing queue.
+        // Apply the network-jitter policy to the render queue instead. Subtract
+        // the frame currently being presented from the desired total depth.
+        const int rttVarianceMs = m_LastRtt.load(std::memory_order_acquire) != 0
+                ? static_cast<int>(m_LastRttVariance.load(std::memory_order_relaxed))
+                : -1;
+        m_AdaptiveQueueDepth.observeNetworkJitter(rttVarianceMs);
+        frameDropTarget = qMax(0, m_AdaptiveQueueDepth.targetDepth() - 1);
     }
     else {
         frameDropTarget = 0;
@@ -387,6 +435,7 @@ void Pacer::renderFrame(AVFrame* frame)
 
         m_RenderQueueHistory.enqueue(m_RenderQueue.count());
     }
+    m_VideoStats->renderQueueTarget = frameDropTarget;
 
     // Catch up if we're several frames ahead
     while (m_RenderQueue.count() > frameDropTarget) {
@@ -407,8 +456,47 @@ void Pacer::dropFrameForEnqueue(QQueue<AVFrame*>& queue)
     SDL_assert(queue.size() <= MAX_QUEUED_FRAMES);
     if (queue.size() == MAX_QUEUED_FRAMES) {
         AVFrame* frame = queue.dequeue();
+        m_VideoStats->pacerDroppedFrames++;
         av_frame_free(&frame);
     }
+}
+
+void Pacer::recordVsyncInterval(uint64_t nowUs, uint64_t targetIntervalUs)
+{
+    if (m_LastVsyncUs != 0 && nowUs > m_LastVsyncUs) {
+        const uint64_t intervalUs = nowUs - m_LastVsyncUs;
+
+        m_VideoStats->vsyncIntervals++;
+        m_VideoStats->totalVsyncIntervalUs += intervalUs;
+        m_VideoStats->maxVsyncIntervalUs =
+                qMax(m_VideoStats->maxVsyncIntervalUs,
+                     static_cast<uint32_t>(qMin<uint64_t>(intervalUs, UINT32_MAX)));
+        if (intervalUs > targetIntervalUs * 3 / 2) {
+            m_VideoStats->lateVsyncIntervals++;
+        }
+    }
+    m_LastVsyncUs = nowUs;
+}
+
+void Pacer::recordQueueDepth(uint32_t (&buckets)[4], int depth)
+{
+    buckets[qBound(0, depth, 3)]++;
+}
+
+const char* Pacer::getPresentationPathName() const
+{
+    if (m_VsyncSource != nullptr) {
+        return m_VsyncSource->name();
+    }
+    if (!m_PacingEnabled) {
+        return "renderer VSync (frame pacing disabled)";
+    }
+    return "renderer-driven VSync";
+}
+
+int Pacer::getDisplayFpsMillihertz() const
+{
+    return m_DisplayFpsMillihz;
 }
 
 void Pacer::submitFrame(AVFrame* frame)

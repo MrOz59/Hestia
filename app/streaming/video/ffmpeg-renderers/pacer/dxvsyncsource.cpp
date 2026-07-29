@@ -72,6 +72,11 @@ bool DxVsyncSource::isAsync()
     return false;
 }
 
+const char* DxVsyncSource::name() const
+{
+    return "Windows D3DKMT VBlank";
+}
+
 void DxVsyncSource::waitForVsync()
 {
     NTSTATUS status;

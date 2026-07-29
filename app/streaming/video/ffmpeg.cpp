@@ -766,6 +766,16 @@ void FFmpegVideoDecoder::addVideoStats(VIDEO_STATS& src, VIDEO_STATS& dst)
     dst.totalDecodeTimeUs += src.totalDecodeTimeUs;
     dst.totalPacerTimeUs += src.totalPacerTimeUs;
     dst.totalRenderTimeUs += src.totalRenderTimeUs;
+    for (int i = 0; i < 4; i++) {
+        dst.pacingQueueDepth[i] += src.pacingQueueDepth[i];
+        dst.renderQueueDepth[i] += src.renderQueueDepth[i];
+    }
+    dst.pacingQueueTarget = src.pacingQueueTarget;
+    dst.renderQueueTarget = src.renderQueueTarget;
+    dst.vsyncIntervals += src.vsyncIntervals;
+    dst.lateVsyncIntervals += src.lateVsyncIntervals;
+    dst.maxVsyncIntervalUs = qMax(dst.maxVsyncIntervalUs, src.maxVsyncIntervalUs);
+    dst.totalVsyncIntervalUs += src.totalVsyncIntervalUs;
 
     if (dst.minHostProcessingLatency == 0) {
         dst.minHostProcessingLatency = src.minHostProcessingLatency;
@@ -956,7 +966,7 @@ void FFmpegVideoDecoder::stringifyVideoStats(VIDEO_STATS& stats, char* output, i
         ret = snprintf(&output[offset],
                        length - offset,
                        "Frames dropped by your network connection: %.2f%%\n"
-                       "Frames dropped due to network jitter: %.2f%%\n"
+                       "Frames dropped by the frame pacer: %.2f%%\n"
                        "Average network latency: %s\n"
                        "Average decoding time: %.2f ms\n"
                        "Average frame queue delay: %.2f ms\n"
@@ -973,6 +983,46 @@ void FFmpegVideoDecoder::stringifyVideoStats(VIDEO_STATS& stats, char* output, i
         }
 
         offset += ret;
+
+        if (m_Pacer != nullptr) {
+            ret = snprintf(&output[offset],
+                           length - offset,
+                           "Presentation path: %s at %.3f Hz\n"
+                           "Pacing queue depth 0/1/2/3+: %u/%u/%u/%u (target: %u)\n"
+                           "Render queue depth 0/1/2/3+: %u/%u/%u/%u (target: %u)\n",
+                           m_Pacer->getPresentationPathName(),
+                           m_Pacer->getDisplayFpsMillihertz() / 1000.0,
+                           stats.pacingQueueDepth[0],
+                           stats.pacingQueueDepth[1],
+                           stats.pacingQueueDepth[2],
+                           stats.pacingQueueDepth[3],
+                           stats.pacingQueueTarget,
+                           stats.renderQueueDepth[0],
+                           stats.renderQueueDepth[1],
+                           stats.renderQueueDepth[2],
+                           stats.renderQueueDepth[3],
+                           stats.renderQueueTarget);
+            if (ret < 0 || ret >= length - offset) {
+                SDL_assert(false);
+                return;
+            }
+            offset += ret;
+        }
+
+        if (stats.vsyncIntervals != 0) {
+            ret = snprintf(&output[offset],
+                           length - offset,
+                           "V-Sync interval average/max: %.2f/%.2f ms (%u late)\n",
+                           (double)(stats.totalVsyncIntervalUs / 1000.0) /
+                                   stats.vsyncIntervals,
+                           stats.maxVsyncIntervalUs / 1000.0,
+                           stats.lateVsyncIntervals);
+            if (ret < 0 || ret >= length - offset) {
+                SDL_assert(false);
+                return;
+            }
+            offset += ret;
+        }
     }
 }
 
@@ -996,7 +1046,7 @@ void FFmpegVideoDecoder::appendDiagnosisText(const Diagnostics::Diagnosis& diagn
 void FFmpegVideoDecoder::logVideoStats(VIDEO_STATS& stats, const char* title)
 {
     if (stats.renderedFps > 0 || stats.renderedFrames != 0) {
-        char videoStatsStr[512];
+        char videoStatsStr[1024];
         stringifyVideoStats(stats, videoStatsStr, sizeof(videoStatsStr));
 
         SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
@@ -2048,6 +2098,16 @@ int FFmpegVideoDecoder::submitDecodeUnit(PDECODE_UNIT du)
     int err;
 
     SDL_assert(m_CurrentTestMode != TestMode::TestFrameOnly);
+
+    if (!LiGetEstimatedRttInfo(&m_ActiveWndVideoStats.lastRtt,
+                               &m_ActiveWndVideoStats.lastRttVariance)) {
+        m_ActiveWndVideoStats.lastRtt = 0;
+        m_ActiveWndVideoStats.lastRttVariance = 0;
+    }
+    if (m_Pacer != nullptr) {
+        m_Pacer->updateNetworkJitter(m_ActiveWndVideoStats.lastRtt,
+                                     m_ActiveWndVideoStats.lastRttVariance);
+    }
 
     // If this is the first frame, reject anything that's not an IDR frame
     if (m_FramesIn == 0 && du->frameType != FRAME_TYPE_IDR) {

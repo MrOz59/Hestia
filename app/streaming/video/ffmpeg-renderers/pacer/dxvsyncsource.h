@@ -39,6 +39,8 @@ public:
 
     virtual bool isAsync() override;
 
+    virtual const char* name() const override;
+
     virtual void waitForVsync() override;
 
 private:

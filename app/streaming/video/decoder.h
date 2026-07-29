@@ -23,6 +23,14 @@ typedef struct _VIDEO_STATS {
     uint64_t totalDecodeTimeUs;                // high-res (1us)
     uint64_t totalPacerTimeUs;                 // high-res (1us)
     uint64_t totalRenderTimeUs;                // high-res (1us)
+    uint32_t pacingQueueDepth[4];               // samples at depth 0/1/2/3+
+    uint32_t renderQueueDepth[4];               // samples at depth 0/1/2/3+
+    uint32_t pacingQueueTarget;                 // latest adaptive target
+    uint32_t renderQueueTarget;                 // latest adaptive target
+    uint32_t vsyncIntervals;
+    uint32_t lateVsyncIntervals;
+    uint32_t maxVsyncIntervalUs;
+    uint64_t totalVsyncIntervalUs;
     uint32_t lastRtt;                          // low-res from enet (1ms)
     uint32_t lastRttVariance;                  // low-res from enet (1ms)
     double totalFps;                           // high-res

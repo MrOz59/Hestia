@@ -60,6 +60,11 @@ bool WaylandVsyncSource::isAsync()
     return true;
 }
 
+const char* WaylandVsyncSource::name() const
+{
+    return "Wayland frame callback";
+}
+
 void WaylandVsyncSource::frameDone(void* data, struct wl_callback* oldCb, uint32_t)
 {
     auto me = (WaylandVsyncSource*)data;

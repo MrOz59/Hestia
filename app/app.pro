@@ -207,6 +207,7 @@ SOURCES += \
     settings/mappingmanager.cpp \
     gui/sdlgamepadkeynavigation.cpp \
     streaming/video/overlaymanager.cpp \
+    streaming/video/ffmpeg-renderers/pacer/pacingpolicy.cpp \
     streaming/video/statsdiagnostics.cpp \
     backend/systemproperties.cpp \
     wm.cpp
@@ -249,6 +250,7 @@ HEADERS += \
     settings/mappingmanager.h \
     gui/sdlgamepadkeynavigation.h \
     streaming/video/overlaymanager.h \
+    streaming/video/ffmpeg-renderers/pacer/pacingpolicy.h \
     streaming/video/statsdiagnostics.h \
     backend/systemproperties.h
 

@@ -83,6 +83,123 @@ CenteredGridView {
         return model
     }
 
+    function formatHermesDiagnostics(diagnostics)
+    {
+        if (!diagnostics || !diagnostics.ok) {
+            return qsTr("Hermes diagnostics are unavailable for this host.")
+        }
+
+        var lines = []
+        if (diagnostics.hestia && diagnostics.hestia.limits) {
+            var limits = diagnostics.hestia.limits
+            lines.push(qsTr("HESTIA PROTOCOL %1").arg(diagnostics.hestia.protocol))
+            lines.push(qsTr("Host ceiling: %1×%2 @ %3 FPS")
+                       .arg(limits.max_width).arg(limits.max_height).arg(limits.max_fps))
+            lines.push(qsTr("Codecs: %1").arg(limits.supported_codecs.join(", ").toUpperCase()))
+            lines.push(qsTr("Accepted FPS: %1").arg(limits.supported_fps.join(", ")))
+        }
+
+        if (diagnostics.preflight) {
+            lines.push("")
+            lines.push(qsTr("PREFLIGHT: %1").arg(diagnostics.preflight.ready ? qsTr("READY") : qsTr("NEEDS ATTENTION")))
+            var checks = diagnostics.preflight.checks || []
+            for (var i = 0; i < checks.length; i++) {
+                var check = checks[i]
+                lines.push(qsTr("[%1] %2").arg(String(check.status).toUpperCase()).arg(check.message))
+            }
+        }
+
+        var runtime = diagnostics.runtime
+        if (runtime) {
+            if (runtime.encoder) {
+                var encoder = runtime.encoder
+                lines.push("")
+                lines.push(qsTr("ENCODER"))
+                lines.push(qsTr("%1 (%2)").arg(encoder.name)
+                           .arg(encoder.hardware ? qsTr("hardware") : qsTr("software")))
+                if (encoder.codecs) {
+                    lines.push(qsTr("Available codecs: %1").arg(encoder.codecs.join(", ").toUpperCase()))
+                }
+                if (encoder.fell_back_to_software) {
+                    lines.push(qsTr("Warning: the host fell back to software encoding."))
+                }
+            }
+
+            if (runtime.sessions) {
+                var sessions = runtime.sessions
+                lines.push("")
+                lines.push(qsTr("SESSIONS"))
+                lines.push(qsTr("Active: %1 | Streaming: %2 | Ended: %3")
+                           .arg(sessions.active).arg(sessions.streaming).arg(sessions.total_ended))
+                lines.push(qsTr("Client losses: %1 | Awaiting reconnect: %2")
+                           .arg(sessions.client_lost_count)
+                           .arg(sessions.awaiting_reconnect ? qsTr("yes") : qsTr("no")))
+                if (sessions.last_termination) {
+                    lines.push(qsTr("Last termination: %1").arg(sessions.last_termination))
+                }
+            }
+
+            if (runtime.pipeline) {
+                var pipeline = runtime.pipeline
+                lines.push("")
+                lines.push(qsTr("LIVE PIPELINE"))
+                lines.push(qsTr("%1×%2 @ %3 FPS | %4 kbps")
+                           .arg(pipeline.width).arg(pipeline.height).arg(pipeline.fps).arg(pipeline.bitrate_kbps))
+                lines.push(qsTr("Encode: %1 ms | Capture to encode: %2 ms")
+                           .arg(pipeline.encode_ms).arg(pipeline.capture_to_encode_ms))
+                lines.push(qsTr("Frames encoded: %1 | Dropped: %2")
+                           .arg(pipeline.frames_encoded).arg(pipeline.frames_dropped))
+            }
+
+            if (runtime.session) {
+                var session = runtime.session
+                lines.push("")
+                lines.push(qsTr("HOST SESSION"))
+                lines.push(qsTr("Environment: %1 | Desktop: %2").arg(session.environment).arg(session.desktop))
+                lines.push(qsTr("Gamescope: %1 | Virtual display capable: %2")
+                           .arg(session.gamescope_running ? qsTr("running") : qsTr("inactive"))
+                           .arg(session.can_host_virtual_display ? qsTr("yes") : qsTr("no")))
+            }
+
+            if (runtime.appliance) {
+                var appliance = runtime.appliance
+                lines.push("")
+                lines.push(qsTr("APPLIANCE"))
+                lines.push(qsTr("Enabled: %1 | Headless capable: %2")
+                           .arg(appliance.enabled ? qsTr("yes") : qsTr("no"))
+                           .arg(appliance.headless_capable ? qsTr("yes") : qsTr("no")))
+                if (appliance.diagnostic) {
+                    lines.push(appliance.diagnostic)
+                }
+            }
+
+            if (runtime.hermes_kms) {
+                var kms = runtime.hermes_kms
+                lines.push("")
+                lines.push(qsTr("HERMES-KMS"))
+                lines.push(qsTr("Output %1: %2").arg(kms.output_index).arg(kms.output_name))
+                lines.push(qsTr("Frames updated: %1 | Acquired: %2 | No frame: %3")
+                           .arg(kms.frame_updates).arg(kms.frames_acquired).arg(kms.acquires_no_frame))
+                lines.push(qsTr("DMA-BUF exports: %1 | Failures: %2")
+                           .arg(kms.dmabuf_exports).arg(kms.dmabuf_export_failures))
+                lines.push(qsTr("Waits ready: %1 | Timed out: %2")
+                           .arg(kms.frame_waits_ready).arg(kms.frame_waits_timed_out))
+            }
+        }
+
+        if (diagnostics.dependencies && diagnostics.dependencies.clipboard) {
+            var clipboard = diagnostics.dependencies.clipboard
+            lines.push("")
+            lines.push(qsTr("CLIPBOARD: %1").arg(clipboard.available ? qsTr("READY") : qsTr("UNAVAILABLE")))
+            lines.push(clipboard.diagnostic)
+            if (!clipboard.available && clipboard.manualInstall) {
+                lines.push(clipboard.manualInstall)
+            }
+        }
+
+        return lines.join("\n")
+    }
+
     Row {
         anchors.centerIn: parent
         spacing: 5
@@ -251,16 +368,8 @@ CenteredGridView {
                     visible: model.online && model.paired && model.hestiaEnhanced
                     onTriggered: {
                         var diagnostics = computerModel.getHestiaDiagnostics(index)
-                        if (!diagnostics.ok || !diagnostics.dependencies || !diagnostics.dependencies.clipboard) {
-                            hestiaStatusDialog.text = qsTr("Hermes diagnostics are unavailable for this host.")
-                        } else {
-                            var clipboard = diagnostics.dependencies.clipboard
-                            hestiaStatusDialog.text = qsTr("Clipboard support: %1\nDiagnostic: %2\n\n%3")
-                                    .arg(clipboard.available ? qsTr("Ready") : qsTr("Unavailable"))
-                                    .arg(clipboard.diagnostic)
-                                    .arg(clipboard.available ? qsTr("No action is required.") : clipboard.manualInstall)
-                        }
-                        hestiaStatusDialog.open()
+                        hestiaDiagnosticsDialog.text = formatHermesDiagnostics(diagnostics)
+                        hestiaDiagnosticsDialog.open()
                     }
                 }
                 NavigableMenuItem {
@@ -455,6 +564,26 @@ CenteredGridView {
     }
 
     NavigableMessageDialog { id: hestiaStatusDialog; standardButtons: Dialog.Ok }
+    NavigableDialog {
+        id: hestiaDiagnosticsDialog
+        property alias text: diagnosticsLabel.text
+        title: qsTr("Hermes Diagnostics")
+        standardButtons: Dialog.Close
+
+        ScrollView {
+            id: diagnosticsScroll
+            width: Math.min(600, Math.max(280, pcGrid.width - 80))
+            height: Math.min(480, Math.max(240, pcGrid.height - 120))
+            clip: true
+            contentWidth: availableWidth
+
+            Label {
+                id: diagnosticsLabel
+                width: diagnosticsScroll.availableWidth
+                wrapMode: Text.Wrap
+            }
+        }
+    }
     NavigableMessageDialog {
         id: pasteHostClipboardDialog
         property int pcIndex: -1

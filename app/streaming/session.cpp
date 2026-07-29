@@ -678,6 +678,106 @@ QJsonObject Session::buildHestiaSessionPrepareRequest() const
     };
 }
 
+void Session::applyHestiaHostLimits()
+{
+    if (!m_Computer->hestiaCapabilities.supportsProtocolV1) {
+        return;
+    }
+
+    const HestiaLimits& limits = m_Computer->hestiaCapabilities.limits;
+    const int requestedWidth = m_StreamConfig.width;
+    const int requestedHeight = m_StreamConfig.height;
+    const int requestedFps = m_StreamConfig.fps;
+
+    if (limits.maxWidth > 0 && limits.maxHeight > 0 &&
+            (requestedWidth > limits.maxWidth || requestedHeight > limits.maxHeight)) {
+        const double scale = qMin(static_cast<double>(limits.maxWidth) / requestedWidth,
+                                  static_cast<double>(limits.maxHeight) / requestedHeight);
+        int negotiatedWidth = qMax(1, qFloor(requestedWidth * scale));
+        int negotiatedHeight = qMax(1, qFloor(requestedHeight * scale));
+
+        // Video encoders generally require even dimensions. Round down so the
+        // negotiated size remains within the host's advertised ceiling.
+        if (negotiatedWidth > 1) {
+            negotiatedWidth &= ~1;
+        }
+        if (negotiatedHeight > 1) {
+            negotiatedHeight &= ~1;
+        }
+
+        m_StreamConfig.width = negotiatedWidth;
+        m_StreamConfig.height = negotiatedHeight;
+        emitLaunchWarning(tr("Hermes supports streams up to %1x%2. Hestia adjusted this session from %3x%4 to %5x%6.")
+                              .arg(limits.maxWidth)
+                              .arg(limits.maxHeight)
+                              .arg(requestedWidth)
+                              .arg(requestedHeight)
+                              .arg(negotiatedWidth)
+                              .arg(negotiatedHeight));
+    }
+
+    int negotiatedFps = requestedFps;
+    int highestSupportedFps = 0;
+    int lowestSupportedFpsAboveRequest = 0;
+    for (const int supportedFps : limits.supportedFps) {
+        if (limits.maxFps > 0 && supportedFps > limits.maxFps) {
+            continue;
+        }
+
+        if (supportedFps <= requestedFps) {
+            highestSupportedFps = qMax(highestSupportedFps, supportedFps);
+        }
+        else if (lowestSupportedFpsAboveRequest == 0 || supportedFps < lowestSupportedFpsAboveRequest) {
+            lowestSupportedFpsAboveRequest = supportedFps;
+        }
+    }
+
+    if (highestSupportedFps > 0) {
+        negotiatedFps = highestSupportedFps;
+    }
+    else if (lowestSupportedFpsAboveRequest > 0) {
+        negotiatedFps = lowestSupportedFpsAboveRequest;
+    }
+    else if (limits.maxFps > 0) {
+        negotiatedFps = qMin(requestedFps, limits.maxFps);
+    }
+
+    if (negotiatedFps != requestedFps) {
+        m_StreamConfig.fps = negotiatedFps;
+        emitLaunchWarning(tr("Hermes does not accept %1 FPS. Hestia adjusted this session to %2 FPS.")
+                              .arg(requestedFps)
+                              .arg(negotiatedFps));
+    }
+
+    SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
+                "Hermes-negotiated stream mode: %dx%d at %d FPS",
+                m_StreamConfig.width,
+                m_StreamConfig.height,
+                m_StreamConfig.fps);
+}
+
+void Session::applyHestiaCodecLimits()
+{
+    if (!m_Computer->hestiaCapabilities.supportsProtocolV1) {
+        return;
+    }
+
+    const QStringList& codecs = m_Computer->hestiaCapabilities.limits.supportedCodecs;
+    if (codecs.isEmpty()) {
+        return;
+    }
+
+    if (!codecs.contains("h264")) {
+        m_SupportedVideoFormats.removeByMask(VIDEO_FORMAT_MASK_H264);
+    }
+    if (!codecs.contains("hevc")) {
+        m_SupportedVideoFormats.removeByMask(VIDEO_FORMAT_MASK_H265);
+    }
+    if (!codecs.contains("av1")) {
+        m_SupportedVideoFormats.removeByMask(VIDEO_FORMAT_MASK_AV1);
+    }
+}
+
 void Session::pollHestiaClipboardSync()
 {
     if (!m_Preferences->hestiaClipboardSync ||
@@ -799,6 +899,7 @@ bool Session::initialize(QQuickWindow* qtWindow)
 
     m_StreamConfig.fps = m_Preferences->fps;
     m_StreamConfig.bitrate = m_Preferences->bitrateKbps;
+    applyHestiaHostLimits();
 
 #ifndef STEAM_LINK
     // Opt-in to all encryption features if we detect that the platform
@@ -860,6 +961,7 @@ bool Session::initialize(QQuickWindow* qtWindow)
     m_SupportedVideoFormats.append(VIDEO_FORMAT_H265);
     m_SupportedVideoFormats.append(VIDEO_FORMAT_H264_HIGH8_444);
     m_SupportedVideoFormats.append(VIDEO_FORMAT_H264);
+    applyHestiaCodecLimits();
 
     switch (m_Preferences->videoCodecConfig)
     {
@@ -971,16 +1073,31 @@ bool Session::initialize(QQuickWindow* qtWindow)
         break;
     }
     case StreamingPreferences::VCC_FORCE_H264:
-        m_SupportedVideoFormats.removeByMask(~VIDEO_FORMAT_MASK_H264);
+        if (m_SupportedVideoFormats & VIDEO_FORMAT_MASK_H264) {
+            m_SupportedVideoFormats.removeByMask(~VIDEO_FORMAT_MASK_H264);
+        }
+        else {
+            emitLaunchWarning(tr("Hermes does not advertise support for H.264. Hestia will use a compatible codec."));
+        }
         break;
     case StreamingPreferences::VCC_FORCE_HEVC:
     case StreamingPreferences::VCC_FORCE_HEVC_HDR_DEPRECATED:
-        m_SupportedVideoFormats.removeByMask(~VIDEO_FORMAT_MASK_H265);
+        if (m_SupportedVideoFormats & VIDEO_FORMAT_MASK_H265) {
+            m_SupportedVideoFormats.removeByMask(~VIDEO_FORMAT_MASK_H265);
+        }
+        else {
+            emitLaunchWarning(tr("Hermes does not advertise support for HEVC. Hestia will use a compatible codec."));
+        }
         break;
     case StreamingPreferences::VCC_FORCE_AV1:
         // We'll try to fall back to HEVC first if AV1 fails. We'd rather not fall back
         // straight to H.264 if the user asked for AV1 and the host doesn't support it.
-        m_SupportedVideoFormats.removeByMask(~(VIDEO_FORMAT_MASK_AV1 | VIDEO_FORMAT_MASK_H265));
+        if (m_SupportedVideoFormats & (VIDEO_FORMAT_MASK_AV1 | VIDEO_FORMAT_MASK_H265)) {
+            m_SupportedVideoFormats.removeByMask(~(VIDEO_FORMAT_MASK_AV1 | VIDEO_FORMAT_MASK_H265));
+        }
+        else {
+            emitLaunchWarning(tr("Hermes does not advertise support for AV1 or HEVC. Hestia will use a compatible codec."));
+        }
         break;
     }
 

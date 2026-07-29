@@ -164,6 +164,10 @@ private:
 
     QJsonObject buildHestiaSessionPrepareRequest() const;
 
+    void applyHestiaHostLimits();
+
+    void applyHestiaCodecLimits();
+
     bool validateLaunch(SDL_Window* testWindow);
 
     void emitLaunchWarning(QString text);

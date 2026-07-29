@@ -254,7 +254,29 @@ QVariantMap ComputerModel::getHestiaDiagnostics(int computerIndex)
     }
     NvHTTP http(computer);
     QJsonObject diagnostics;
-    return http.getHestiaDiagnostics(&diagnostics) ? diagnostics.toVariantMap() : QVariantMap{};
+    if (!http.getHestiaDiagnostics(&diagnostics)) {
+        return {};
+    }
+
+    QVariantMap result = diagnostics.toVariantMap();
+    QVariantList supportedFps;
+    for (const int fps : computer->hestiaCapabilities.limits.supportedFps) {
+        supportedFps.append(fps);
+    }
+
+    QVariantMap limits;
+    limits.insert("max_width", computer->hestiaCapabilities.limits.maxWidth);
+    limits.insert("max_height", computer->hestiaCapabilities.limits.maxHeight);
+    limits.insert("max_fps", computer->hestiaCapabilities.limits.maxFps);
+    limits.insert("supported_fps", supportedFps);
+    limits.insert("supported_codecs", computer->hestiaCapabilities.limits.supportedCodecs);
+
+    QVariantMap capabilities;
+    capabilities.insert("protocol", computer->hestiaCapabilities.hestiaProtocol);
+    capabilities.insert("server_version", computer->hestiaCapabilities.serverVersion);
+    capabilities.insert("limits", limits);
+    result.insert("hestia", capabilities);
+    return result;
 }
 
 bool ComputerModel::pasteHestiaClipboard(int computerIndex)

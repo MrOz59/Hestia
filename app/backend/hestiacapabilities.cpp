@@ -206,6 +206,10 @@ bool HestiaCapabilities::fromJson(const QJsonObject& response, HestiaCapabilitie
             !readBool(features, "permission_system", &parsed.features.permissionSystem, error)) {
         return false;
     }
+    if (features.contains("multi_user_sessions") &&
+            !readBool(features, "multi_user_sessions", &parsed.features.multiUserSessions, error)) {
+        return false;
+    }
 
     const QJsonObject limits = response.value("limits").toObject();
     const QSet<QString> limitKeys = {"max_width", "max_height", "max_fps", "supported_fps", "supported_codecs"};

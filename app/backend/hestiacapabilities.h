@@ -17,6 +17,7 @@ struct HestiaFeatures
 {
     bool virtualDisplay = false;
     QStringList virtualDisplayBackend;
+    bool multiUserSessions = false;
     bool kdeKscreen = false;
     bool displayRecovery = false;
     bool clientResolutionMatching = false;

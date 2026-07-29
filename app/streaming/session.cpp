@@ -652,13 +652,18 @@ QJsonObject Session::buildHestiaSessionPrepareRequest() const
         {"id", QString::number(m_App.id)},
         {"launch_mode", launchMode},
     };
-
-    return {
+    QJsonObject request {
         {"client", client},
         {"stream", stream},
         {"virtual_display", virtualDisplay},
         {"app", app},
     };
+    if (features.multiUserSessions) {
+        request.insert("session", QJsonObject {
+            {"isolation", virtualDisplay.value("enabled").toBool() ? "required" : "shared"},
+        });
+    }
+    return request;
 }
 
 void Session::pollHestiaClipboardSync()
@@ -1404,7 +1409,7 @@ private:
         // reject this best-effort extension request.
         if (m_Session->m_Computer->hestiaCapabilities.supportsProtocolV1) {
             NvHTTP http(m_Session->m_Computer);
-            http.stopHestiaSession();
+            http.stopHestiaSession(m_Session->m_HestiaSessionId);
         }
 
         // Finish cleanup of the connection state
@@ -1731,7 +1736,11 @@ bool Session::startConnectionAsync()
     try {
         NvHTTP http(m_Computer);
         if (m_ShouldPrepareHestiaSession) {
-            http.prepareHestiaSession(m_HestiaSessionPrepareRequest);
+            if (!http.prepareHestiaSession(m_HestiaSessionPrepareRequest, &m_HestiaSessionId) &&
+                    m_Computer->hestiaCapabilities.features.multiUserSessions) {
+                emit displayLaunchError(tr("The host could not reserve an independent streaming session. Check the Hermes-KMS driver and isolated-session setup."));
+                return false;
+            }
         }
         http.startApp(m_Computer->currentGameId != 0 ? "resume" : "launch",
                       m_Computer->isNvidiaServerSoftware,

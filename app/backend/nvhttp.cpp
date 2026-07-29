@@ -342,7 +342,7 @@ bool NvHTTP::probeHestiaDiagnostics(HestiaPreflight* preflight)
     return true;
 }
 
-bool NvHTTP::prepareHestiaSession(const QJsonObject& sessionRequest)
+bool NvHTTP::prepareHestiaSession(const QJsonObject& sessionRequest, QString* sessionId)
 {
     if (m_ServerCert.isNull()) {
         qDebug() << "[Hestia] Skipping session prepare; host is not paired";
@@ -433,11 +433,15 @@ bool NvHTTP::prepareHestiaSession(const QJsonObject& sessionRequest)
         }
     }
 
-    qDebug() << "[Hestia] Session prepared:" << response.value("session_id").toString();
+    const QString preparedSessionId = response.value("session_id").toString();
+    if (sessionId != nullptr) {
+        *sessionId = preparedSessionId;
+    }
+    qDebug() << "[Hestia] Session prepared:" << preparedSessionId;
     return true;
 }
 
-bool NvHTTP::stopHestiaSession()
+bool NvHTTP::stopHestiaSession(const QString& sessionId)
 {
     if (m_ServerCert.isNull()) {
         return false;
@@ -449,9 +453,14 @@ bool NvHTTP::stopHestiaSession()
     url.setPort(m_Address.port() + 1);
     url.setPath("/api/hestia/v1/session/stop");
     QNetworkRequest request(url);
+    request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
     request.setSslConfiguration(IdentityManager::get()->getSslConfig());
     auto sslErrorsConnection = connect(m_Nam, &QNetworkAccessManager::sslErrors, this, &NvHTTP::handleSslErrors);
-    QNetworkReply* reply = m_Nam->post(request, QByteArray());
+    QJsonObject body;
+    if (!sessionId.isEmpty()) {
+        body.insert("session_id", sessionId);
+    }
+    QNetworkReply* reply = m_Nam->post(request, QJsonDocument(body).toJson(QJsonDocument::Compact));
     QEventLoop loop;
     QTimer::singleShot(HESTIA_SESSION_PREPARE_TIMEOUT_MS, &loop, &QEventLoop::quit);
     connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);

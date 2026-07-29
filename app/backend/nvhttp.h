@@ -134,10 +134,10 @@ public:
     probeHestiaDiagnostics(HestiaPreflight* preflight);
 
     bool
-    prepareHestiaSession(const QJsonObject& sessionRequest);
+    prepareHestiaSession(const QJsonObject& sessionRequest, QString* sessionId = nullptr);
 
     bool
-    stopHestiaSession();
+    stopHestiaSession(const QString& sessionId = QString());
 
     bool
     getHestiaDisplayStatus(QJsonObject* status);

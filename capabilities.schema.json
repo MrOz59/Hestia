@@ -53,6 +53,7 @@
       ],
       "properties": {
         "virtual_display": { "type": "boolean" },
+        "multi_user_sessions": { "type": "boolean" },
         "virtual_display_backend": {
           "type": "array",
           "items": { "enum": ["evdi", "hermes_kms"] },

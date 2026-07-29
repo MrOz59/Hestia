@@ -59,6 +59,25 @@ QVariant ComputerModel::data(const QModelIndex& index, int role) const
     case HestiaClipboardSyncRole:
         return computer->hestiaCapabilities.supportsProtocolV1 &&
                computer->hestiaCapabilities.features.clipboardSync;
+    case HestiaReadinessWarningRole:
+        return computer->hestiaCapabilities.supportsProtocolV1 &&
+               computer->hestiaPreflight.valid &&
+               (!computer->hestiaPreflight.ready || !computer->hestiaPreflight.problems().isEmpty());
+    case HestiaReadinessDetailsRole: {
+        // A newline-separated list of the non-ok check messages, for a tooltip.
+        if (!computer->hestiaCapabilities.supportsProtocolV1 ||
+                !computer->hestiaPreflight.valid) {
+            return QString();
+        }
+        QStringList lines;
+        for (const auto& problem : computer->hestiaPreflight.problems()) {
+            lines.append(problem.message);
+        }
+        if (lines.isEmpty() && !computer->hestiaPreflight.ready) {
+            lines.append(tr("Hermes reports that this host is not ready to stream."));
+        }
+        return lines.join('\n');
+    }
     case DetailsRole: {
         QString state, pairState;
 
@@ -131,6 +150,8 @@ QHash<int, QByteArray> ComputerModel::roleNames() const
     names[HestiaServerCommandsRole] = "hestiaServerCommands";
     names[HestiaPermissionSystemRole] = "hestiaPermissionSystem";
     names[HestiaClipboardSyncRole] = "hestiaClipboardSync";
+    names[HestiaReadinessWarningRole] = "hestiaReadinessWarning";
+    names[HestiaReadinessDetailsRole] = "hestiaReadinessDetails";
     names[DetailsRole] = "details";
 
     return names;

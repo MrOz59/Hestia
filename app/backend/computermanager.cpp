@@ -78,6 +78,15 @@ private:
         HestiaCapabilities capabilities;
         http.probeHestiaCapabilities(&capabilities);
         m_Computer->setHestiaCapabilities(capabilities);
+
+        // Refresh streaming readiness for paired Hermes hosts so the UI can warn
+        // about problems before the user starts a session.
+        HestiaPreflight preflight;
+        if (capabilities.supportsProtocolV1 &&
+                m_Computer->pairState == NvComputer::PS_PAIRED) {
+            http.probeHestiaDiagnostics(&preflight);
+        }
+        m_Computer->setHestiaPreflight(preflight);
     }
 
     void run() override
@@ -637,6 +646,12 @@ private:
                    HestiaCapabilities capabilities;
                    http.probeHestiaCapabilities(&capabilities);
                    m_Computer->setHestiaCapabilities(capabilities);
+
+                   HestiaPreflight preflight;
+                   if (capabilities.supportsProtocolV1) {
+                       http.probeHestiaDiagnostics(&preflight);
+                   }
+                   m_Computer->setHestiaPreflight(preflight);
                }
 
                emit pairingCompleted(m_Computer, nullptr);

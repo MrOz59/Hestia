@@ -26,6 +26,13 @@ public:
     static
     int getDisplayRefreshRate(SDL_Window* window);
 
+    // Like getDisplayRefreshRate() but returns the rate in millihertz, with the
+    // common NTSC-derived fractional rates (e.g. 59.94 Hz) reconstructed from
+    // SDL2's truncated integer refresh_rate. Used by the pacer where the ~0.1%
+    // difference matters (vsync interval, near-equality drop decisions).
+    static
+    int getDisplayRefreshRateMillihertz(SDL_Window* window);
+
     static
     bool hasFastAes();
 

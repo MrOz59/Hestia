@@ -105,6 +105,15 @@ public:
 
     void setHestiaCapabilities(const HestiaCapabilities& capabilities);
 
+    // Streaming-readiness preflight (from the Hermes diagnostics endpoint).
+    // Refreshed alongside capabilities for paired hosts; advisory only.
+    HestiaPreflight hestiaPreflight;
+
+    void setHestiaPreflight(const HestiaPreflight& preflight);
+
+    // True when the host reported a failing or advisory readiness check.
+    bool hasHestiaReadinessWarning() const;
+
     // Persisted traits
     NvAddress localAddress;
     NvAddress remoteAddress;

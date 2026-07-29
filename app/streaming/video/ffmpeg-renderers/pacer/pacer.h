@@ -48,7 +48,7 @@ private:
 
     static int renderThread(void* context);
 
-    void handleVsync(int timeUntilNextVsyncMillis);
+    void handleVsync(int timeUntilNextVsyncMicros);
 
     void enqueueFrameForRenderingAndUnlock(AVFrame* frame);
 
@@ -73,6 +73,10 @@ private:
     IFFmpegRenderer* m_VsyncRenderer;
     int m_MaxVideoFps;
     int m_DisplayFps;
+    // Display rate in millihertz, preserving fractional refresh (e.g. 59.94 Hz).
+    // Used for the vsync interval and near-equality drop decisions, where the
+    // ~0.1% the integer m_DisplayFps loses actually matters.
+    int m_DisplayFpsMillihz;
     PVIDEO_STATS m_VideoStats;
     int m_RendererAttributes;
 };

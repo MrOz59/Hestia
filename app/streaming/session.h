@@ -275,6 +275,7 @@ private:
     int m_FlushingWindowEventsRef;
     QStringList m_LaunchWarnings;
     QJsonObject m_HestiaSessionPrepareRequest;
+    QString m_HestiaSessionId;
     bool m_ShouldPrepareHestiaSession;
     Uint32 m_LastHestiaClipboardSyncCheckMs;
     QString m_LastHestiaClipboardText;

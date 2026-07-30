@@ -61,12 +61,16 @@ Hestia does not assume Hermes-only features exist on every host. If a host does
 not expose a capability, Hestia falls back to the standard Moonlight-compatible
 behavior.
 
-For Hermes hosts that advertise `multi_user_sessions`, Hestia requests an
-independent session before the normal GameStream launch. It retains the opaque
-reservation ID and sends it when stopping, so another Hestia client's stream
-and virtual display are not affected. If Hermes cannot reserve the isolated
-runtime, Hestia aborts that enhanced launch instead of falling back to the
-shared host session.
+For Hermes hosts whose administrator enabled `multi_user_sessions`, Hestia
+requests an independent session before the normal GameStream launch. Hestia
+does not expose a client-side switch and never enables isolation on the host;
+when Hermes reports it disabled, the normal shared GameStream path remains in
+use. Newer hosts expose explicit `enabled` and `ready` state, which takes
+priority over the legacy capability boolean. For an enabled isolated launch,
+Hestia retains the opaque reservation ID and sends it when stopping, so another
+client's stream and virtual display are not affected. If Hermes cannot reserve
+that configured isolated runtime, Hestia aborts instead of silently falling
+back to the shared host session.
 
 Some Hermes-focused features are based on ideas from ClassicOldSong's Android
 Moonlight fork, especially the Apollo-oriented client behavior that is useful

@@ -211,6 +211,26 @@ bool HestiaCapabilities::fromJson(const QJsonObject& response, HestiaCapabilitie
             !readBool(features, "multi_user_sessions", &parsed.features.multiUserSessions, error)) {
         return false;
     }
+    // Newer Hermes builds distinguish support for the prototype from the
+    // host administrator's explicit enabled/ready state. Prefer that state
+    // over the legacy boolean so a client can never turn isolation on merely
+    // because the installed binary supports it.
+    if (features.value("hermes_kms_isolated_sessions").isObject()) {
+        const QJsonObject isolatedSessions =
+                features.value("hermes_kms_isolated_sessions").toObject();
+        if (isolatedSessions.contains("enabled")) {
+            if (!readBool(isolatedSessions, "enabled",
+                          &parsed.features.multiUserSessions, error)) {
+                return false;
+            }
+            parsed.features.hasExplicitMultiUserSessionState = true;
+        }
+        if (isolatedSessions.contains("ready") &&
+                !readBool(isolatedSessions, "ready",
+                          &parsed.features.multiUserSessionsReady, error)) {
+            return false;
+        }
+    }
 
     const QJsonObject limits = response.value("limits").toObject();
     const QSet<QString> limitKeys = {"max_width", "max_height", "max_fps", "supported_fps", "supported_codecs"};

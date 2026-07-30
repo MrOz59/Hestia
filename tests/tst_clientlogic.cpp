@@ -60,6 +60,11 @@ QJsonObject validCapabilities()
         {"features", QJsonObject {
             {"virtual_display", true},
             {"multi_user_sessions", true},
+            {"hermes_kms_isolated_sessions", QJsonObject {
+                {"supported", true},
+                {"enabled", true},
+                {"ready", true},
+            }},
             {"virtual_display_backend", QJsonArray {"hermes_kms"}},
             {"kde_kscreen", true},
             {"display_recovery", true},
@@ -1796,6 +1801,27 @@ private slots:
         QString error;
         QVERIFY(!HestiaCapabilities::fromJson(response, &capabilities, &error));
         QVERIFY(error.contains(QStringLiteral("protocol v1")));
+    }
+
+    void capabilitiesPreferHostSelectedIsolationState()
+    {
+        QJsonObject response = validCapabilities();
+        QJsonObject features = response.value("features").toObject();
+        features.insert("multi_user_sessions", true);
+        features.insert("hermes_kms_isolated_sessions", QJsonObject {
+            {"supported", true},
+            {"enabled", false},
+            {"ready", false},
+        });
+        response.insert("features", features);
+
+        HestiaCapabilities capabilities;
+        QString error;
+        QVERIFY2(HestiaCapabilities::fromJson(response, &capabilities, &error),
+                 qPrintable(error));
+        QVERIFY(capabilities.features.hasExplicitMultiUserSessionState);
+        QVERIFY(!capabilities.features.multiUserSessions);
+        QVERIFY(!capabilities.features.multiUserSessionsReady);
     }
 
     void preflightTreatsUnknownStatusAsWarning()

@@ -1,6 +1,6 @@
 # Hestia Client-Side Roadmap
 
-Status: **active** · Last updated: 2026-07-29
+Status: **active** · Last updated: 2026-07-30
 
 ## Scope
 
@@ -70,6 +70,31 @@ per-second stats flip in `ffmpeg.cpp`.
   VSync timing, decode, render queue, packet loss, RTT jitter, host latency,
   insufficient samples, spike grouping, and translated overlay formatting.
   The Linux CI runs this suite on every push and pull request.
+- **0.5 — Pipeline latency distributions.** ✅ Fixed, mergeable histograms now
+  report p50/p95/p99 for reassembly, decode, pacer queue, and render stages.
+  Recording is O(1), allocation-free, and covered by deterministic tests for
+  percentile calculation, window merging, and bounded outliers. Decoder,
+  pacing, and render queue depths are sampled into fixed 0/1/2/3+ buckets.
+- **0.6 — Per-frame correlation.** ✅ The GameStream frame ID is retained from
+  receive through decode and presentation. `HESTIA_FRAME_TRACE=1` enables one
+  structured terminal record per frame with receive, assemble, decode,
+  presentation, and discard timestamps/reasons. The active timeline uses 512
+  fixed slots and does not allocate while recording stages; terminal logging
+  remains opt-in because it can incur I/O.
+- **0.7 — RTP reorder/FEC queue depth.** ✅ `moonlight-common-c` records the
+  current depth, stream-lifetime maximum, sample count, and accumulated depth
+  of its pending/completed RTP packet lists. Each completed decode unit carries
+  the peak packet depth observed while assembling that frame. Hestia aggregates
+  these peaks in a fixed power-of-two histogram and reports p50/p95/p99/max in
+  the debug overlay and session log.
+
+The Hermes H2 benchmark harness now consumes the existing
+`HESTIA_FRAME_TRACE` records directly. Its importer labels one client log per
+network profile, computes exact nearest-rank receive-to-present p95/p99 and
+frame-ID gaps, and pairs them with the host windows without assuming that the
+two monotonic clocks share an epoch. No new GameStream message or Hestia wire
+capability is required. `scripts/hestia-h2-test.sh` launches the local Release
+binary with tracing enabled and refuses to overwrite a profile log.
 
 The classifier no longer treats one normal frame budget spent in render+VSync
 as a presentation failure. Pacer drops are attributed to network or local
@@ -176,15 +201,35 @@ sub-item should land behind validation on real displays.
 
 ---
 
-## Phase 3 — Audio: stutter and A/V sync
+## Phase 3 — Audio: stutter and A/V sync  🟡 IN PROGRESS
 
 **Why fourth:** *"audio stutter,"* *"audio delayed vs video,"* recent upstream
 reports of dropouts on Intel N-series mini PCs. Self-contained subsystem
 ([audio/](../app/streaming/audio/)), so it can proceed in parallel with Phase 2.
 
-- **3.1 — Buffer/underrun audit.** Characterize dropouts in `sdlaud.cpp`; expose
-  the buffer-size↔latency tradeoff as a setting instead of a hidden constant,
-  and detect underruns into the Phase 0 diagnosis ("audio underrunning").
+- **3.1 — Buffer/underrun audit.** ✅ The observability baseline is complete:
+  the GameStream receiver now publishes bounded one-second audio windows and a
+  final session summary through `ISessionTelemetry`. SDL reports playback queue
+  depth, device-buffer duration, queue high-water mark, backpressure waits,
+  queue failures, and underruns; SLAudio reports submissions and backpressure
+  while explicitly marking queue depth as unavailable. Receiver metrics include
+  Opus decode/concealment, recovery drops, renderer failures/reinitializations,
+  and the existing RTP audio/FEC counters. The debug overlay now diagnoses
+  underruns, network concealment, backpressure, and output-device failure. A
+  persisted audio-latency profile now exposes the buffer-size↔latency tradeoff
+  without changing existing users:
+
+  - **Default:** exact legacy behavior. SDL uses a 10 ms minimum device buffer,
+    three packets, a 50 ms playback limit, and 30 ms receiver backpressure;
+    SLAudio uses 40 ms per stereo pair.
+  - **Low latency:** retains SDL's safe 10 ms floor but uses two packets and
+    30/20 ms queue limits; SLAudio uses 20 ms per stereo pair.
+  - **Smooth playback:** uses a 15 ms/four-packet SDL target and 80/50 ms queue
+    limits; SLAudio uses 60 ms per stereo pair.
+
+  The pure policy is covered by deterministic tests, the effective profile and
+  limits are included in session telemetry, and non-default profiles apply only
+  to the next stream.
 - **3.2 — A/V sync offset control.** A user-tunable audio delay (ms), persisted
   per device — directly addresses the "audio 300 ms late" class of report. The
   desktop client currently offers no fine audio-delay adjustment.
@@ -196,6 +241,13 @@ A/V offset adjustable and audibly correct.
 
 **Risk:** medium. Audio buffer changes are easy to regress; keep defaults intact
 and make new behavior opt-in until validated.
+
+The legacy Limelight audio callback supplies an Opus payload but no media
+presentation timestamp. Consequently, Phase 3 currently reports an estimated
+local presentation delay (receiver queue + renderer queue + device buffer) and
+marks absolute A/V offset as unavailable. A real A/V offset must wait for a
+timestamped receiver, such as the future HDT path; the client must not infer one
+by comparing unrelated process clocks.
 
 ---
 
@@ -301,4 +353,41 @@ specific, correct next step.
 - ✅ **Phase 2** — Fractional refresh handling, adaptive queue depth, X11/
   Wayland presentation telemetry, late-VSync diagnosis, and callback correctness
   are implemented and regression-tested (2.1–2.3).
-- ⏭️ **Next:** Phase 3 audio buffer/underrun instrumentation and A/V sync.
+- 🚧 **C1 architecture track** — A typed, injectable `IHostProtocol` now owns
+  session prepare/launch/stop. The `GameStreamHostProtocol` adapter retains the
+  legacy `NvHTTP` behavior while keeping Hermes JSON field names out of
+  `Session`. A typed, injectable `IClientTransport` now owns connection
+  start/interrupt/stop, while `GameStreamClientTransport` confines the legacy
+  callbacks and `Li*` lifecycle calls to its adapter. An injectable
+  `IConnectivityAgent` now provides a stable path selection shared by Session's
+  MTU policy and the transport; `GameStreamConnectivityAgent` confines the
+  legacy active-address and LAN/VPN reachability lookup. An injectable
+  `IVideoReceiver` now carries typed renderer capabilities, while
+  `GameStreamVideoReceiver` confines `DECODER_RENDERER_CALLBACKS`, video setup,
+  push/pull selection, and synchronized `DECODE_UNIT` submission. An injectable
+  `IAudioReceiver` now owns typed channel/device checks and mute state, while
+  `GameStreamAudioReceiver` confines `AUDIO_RENDERER_CALLBACKS`, Opus decoding,
+  renderer recovery, and post-reinitialization sample dropping. A typed
+  `IDecoder` now exposes decoder properties, HDR state, main-thread rendering,
+  and window changes without Limelight structures or capability bitmasks.
+  `LegacyVideoDecoderAdapter` preserves the initialized FFmpeg/SLVideo decoder
+  and confines `PDECODE_UNIT` submission to the GameStream path. A typed
+  `IRenderScheduler` now owns move-only zero-copy decoded frames, source timing,
+  local presentation deadlines, network conditions, and presentation status.
+  `LegacyPacerAdapter` preserves the existing FFmpeg Pacer and VSync paths.
+  A typed, injectable `IInputSender` now carries session-local sequence,
+  monotonic capture timestamp, device ID, replaceability, and semantic events
+  for keyboard/text, mouse, scroll, touch, pen, controllers, and sensors.
+  `GameStreamInputSender` confines every `LiSend*` call, host input capability
+  flag, and legacy button/capability mapping to the adapter. Fake-adapter and
+  payload tests cover these boundaries. A typed, injectable
+  `ISessionTelemetry` now receives lifecycle, connection quality, video-window,
+  final-summary, and terminal-frame events. FFmpeg and Pacer publish through
+  this sink instead of formatting the debug overlay or writing frame traces
+  directly; `LegacySessionTelemetry` preserves the current SDL log, translated
+  diagnosis, spike history, and overlay behavior. A null adapter keeps decoder
+  probing side-effect free, and a fake sink covers the ninth C1 boundary.
+- ✅ **C1 architecture track complete:** all nine planned seams are injectable
+  and retain GameStream adapters.
+- ⏭️ **Next implementation slice:** Phase 3 audio buffer/underrun
+  instrumentation and A/V sync, gated by the Phase 0 telemetry.

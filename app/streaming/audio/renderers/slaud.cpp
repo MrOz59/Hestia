@@ -2,10 +2,15 @@
 
 #include "SDL_compat.h"
 
-SLAudioRenderer::SLAudioRenderer()
+SLAudioRenderer::SLAudioRenderer(
+        AudioBuffer::Profile profile)
     : m_AudioContext(nullptr),
       m_AudioStream(nullptr),
-      m_AudioBuffer(nullptr)
+      m_AudioBuffer(nullptr),
+      m_AudioBufferSize(0),
+      m_MaxQueuedAudioMs(0),
+      m_BufferingProfile(profile),
+      m_Metrics {}
 {
     SLAudio_SetLogFunction(SLAudioRenderer::slLogCallback, nullptr);
 }
@@ -19,9 +24,25 @@ bool SLAudioRenderer::prepareForPlayback(const OPUS_MULTISTREAM_CONFIGURATION* o
         return false;
     }
 
-    // This number is pretty conservative (especially for surround), but
-    // it's hard to avoid since we get crushed by CPU limitations.
-    m_MaxQueuedAudioMs = 40 * opusConfig->channelCount / 2;
+    const AudioBuffer::Policy bufferPolicy =
+            AudioBuffer::calculate(
+                m_BufferingProfile,
+                AudioBuffer::Backend::SlAudio,
+                {
+                    static_cast<uint32_t>(
+                        opusConfig->sampleRate),
+                    static_cast<uint32_t>(
+                        opusConfig->samplesPerFrame),
+                    static_cast<uint8_t>(
+                        opusConfig->channelCount),
+                });
+    m_MaxQueuedAudioMs =
+            bufferPolicy.upstreamBackpressureLimitMs;
+    m_Metrics.queueLimitMs =
+            bufferPolicy.playbackQueueLimitMs;
+    m_Metrics.upstreamBackpressureLimitMs =
+            bufferPolicy.upstreamBackpressureLimitMs;
+    m_Metrics.deviceRunning = true;
 
     m_AudioBufferSize = opusConfig->samplesPerFrame *
                         opusConfig->channelCount *
@@ -104,14 +125,29 @@ bool SLAudioRenderer::submitAudio(int bytesWritten)
     if (LiGetPendingAudioDuration() < m_MaxQueuedAudioMs) {
         SLAudio_SubmitFrame(m_AudioStream);
         m_AudioBuffer = nullptr;
+        m_Metrics.submittedPackets++;
+        m_Metrics.submittedBytes +=
+                static_cast<uint64_t>(bytesWritten);
     }
     else {
+        m_Metrics.backpressureSkippedPackets++;
         SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
                     "Too many queued audio frames: %d",
                     LiGetPendingAudioFrames());
     }
 
     return true;
+}
+
+const char* SLAudioRenderer::rendererName() const noexcept
+{
+    return "SLAudio";
+}
+
+AudioTelemetry::RendererMetrics
+SLAudioRenderer::playbackMetrics() const noexcept
+{
+    return m_Metrics;
 }
 
 IAudioRenderer::AudioFormat SLAudioRenderer::getAudioBufferFormat()

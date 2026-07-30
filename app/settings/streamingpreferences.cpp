@@ -23,6 +23,7 @@
 #define SER_HOSTAUDIO "hostaudio"
 #define SER_MULTICONT "multicontroller"
 #define SER_AUDIOCFG "audiocfg"
+#define SER_AUDIO_LATENCY_PROFILE "audioLatencyProfile"
 #define SER_VIDEOCFG "videocfg"
 #define SER_HDR "hdr"
 #define SER_HESTIA_VDISPLAY "hestiaVirtualDisplay"
@@ -170,6 +171,17 @@ void StreamingPreferences::reload()
                                                          static_cast<int>(CaptureSysKeysMode::CSK_OFF)).toInt());
     audioConfig = static_cast<AudioConfig>(settings.value(SER_AUDIOCFG,
                                                   static_cast<int>(AudioConfig::AC_STEREO)).toInt());
+    audioLatencyProfile = static_cast<AudioLatencyProfile>(
+        settings.value(
+            SER_AUDIO_LATENCY_PROFILE,
+            static_cast<int>(
+                AudioLatencyProfile::ALP_DEFAULT))
+            .toInt());
+    if (audioLatencyProfile < ALP_DEFAULT ||
+            audioLatencyProfile >
+                ALP_SMOOTH_PLAYBACK) {
+        audioLatencyProfile = ALP_DEFAULT;
+    }
     videoCodecConfig = static_cast<VideoCodecConfig>(settings.value(SER_VIDEOCFG,
                                                   static_cast<int>(VideoCodecConfig::VCC_AUTO)).toInt());
     videoDecoderSelection = static_cast<VideoDecoderSelection>(settings.value(SER_VIDEODEC,
@@ -360,6 +372,9 @@ void StreamingPreferences::save()
     settings.setValue(SER_DETECTNETBLOCKING, detectNetworkBlocking);
     settings.setValue(SER_SHOWPERFOVERLAY, showPerformanceOverlay);
     settings.setValue(SER_AUDIOCFG, static_cast<int>(audioConfig));
+    settings.setValue(
+        SER_AUDIO_LATENCY_PROFILE,
+        static_cast<int>(audioLatencyProfile));
     settings.setValue(SER_HDR, enableHdr);
     settings.setValue(SER_HESTIA_VDISPLAY, hestiaVirtualDisplay);
     settings.setValue(SER_HESTIA_CLIPBOARD_SYNC, hestiaClipboardSync);

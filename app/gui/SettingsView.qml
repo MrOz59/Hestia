@@ -1107,6 +1107,54 @@ Flickable {
                     }
                 }
 
+                Label {
+                    width: parent.width
+                    text: qsTr("Audio latency profile")
+                    font.pointSize: 12
+                    wrapMode: Text.Wrap
+                }
+
+                AutoResizingComboBox {
+                    Component.onCompleted: {
+                        var savedProfile = StreamingPreferences.audioLatencyProfile
+                        currentIndex = 0
+                        for (var i = 0; i < audioLatencyListModel.count; i++) {
+                            if (savedProfile === audioLatencyListModel.get(i).val) {
+                                currentIndex = i
+                                break
+                            }
+                        }
+                        activated(currentIndex)
+                    }
+
+                    id: audioLatencyComboBox
+                    textRole: "text"
+                    model: ListModel {
+                        id: audioLatencyListModel
+                        ListElement {
+                            text: qsTr("Default (recommended)")
+                            val: StreamingPreferences.ALP_DEFAULT
+                        }
+                        ListElement {
+                            text: qsTr("Low latency")
+                            val: StreamingPreferences.ALP_LOW_LATENCY
+                        }
+                        ListElement {
+                            text: qsTr("Smooth playback")
+                            val: StreamingPreferences.ALP_SMOOTH_PLAYBACK
+                        }
+                    }
+                    onActivated: {
+                        StreamingPreferences.audioLatencyProfile =
+                                audioLatencyListModel.get(currentIndex).val
+                    }
+
+                    ToolTip.delay: 1000
+                    ToolTip.timeout: 7000
+                    ToolTip.visible: hovered
+                    ToolTip.text: qsTr("Changes apply to the next stream. Low latency may underrun on unstable links; Smooth playback adds latency to tolerate more jitter.")
+                }
+
 
                 CheckBox {
                     id: audioPcCheck
@@ -1414,7 +1462,7 @@ Flickable {
                         ListElement {
                             text: qsTr("Maximized")
                             val: StreamingPreferences.UI_MAXIMIZED
-                        }   
+                        }
                         ListElement {
                             text: qsTr("Fullscreen")
                             val: StreamingPreferences.UI_FULLSCREEN

@@ -771,6 +771,41 @@
     </message>
 </context>
 <context>
+    <name>HestiaAudioDiagnostics</name>
+    <message>
+        <source>The audio output device stopped or rejected data.</source>
+        <translation>O dispositivo de saída de áudio parou ou rejeitou dados.</translation>
+    </message>
+    <message>
+        <source>%1 renderer issue(s)</source>
+        <translation>%1 problema(s) no renderizador</translation>
+    </message>
+    <message>
+        <source>The audio output buffer ran empty. Audio may stutter.</source>
+        <translation>O buffer de saída de áudio ficou vazio. O áudio pode apresentar falhas.</translation>
+    </message>
+    <message>
+        <source>%1 underrun(s)</source>
+        <translation>%1 esvaziamento(s) de buffer</translation>
+    </message>
+    <message>
+        <source>Audio packets were lost and concealed.</source>
+        <translation>Pacotes de áudio foram perdidos e ocultados.</translation>
+    </message>
+    <message>
+        <source>%1 concealed packet(s)</source>
+        <translation>%1 pacote(s) ocultado(s)</translation>
+    </message>
+    <message>
+        <source>Audio was discarded to prevent the playback queue from growing.</source>
+        <translation>Áudio foi descartado para impedir o crescimento da fila de reprodução.</translation>
+    </message>
+    <message>
+        <source>%1 backpressure discard(s)</source>
+        <translation>%1 descarte(s) por contrapressão</translation>
+    </message>
+</context>
+<context>
     <name>SettingsView</name>
     <message>
         <location filename="../gui/SettingsView.qml" line="13"/>
@@ -953,6 +988,26 @@
         <location filename="../gui/SettingsView.qml" line="940"/>
         <source>Mutes Moonlight&apos;s audio when you Alt+Tab out of the stream or click on a different window.</source>
         <translation>Silencia o áudio do Moonlight quando você usar Alt+Tab fora do fluxo ou clica em uma janela diferente.</translation>
+    </message>
+    <message>
+        <source>Audio latency profile</source>
+        <translation>Perfil de latência do áudio</translation>
+    </message>
+    <message>
+        <source>Default (recommended)</source>
+        <translation>Padrão (recomendado)</translation>
+    </message>
+    <message>
+        <source>Low latency</source>
+        <translation>Baixa latência</translation>
+    </message>
+    <message>
+        <source>Smooth playback</source>
+        <translation>Reprodução estável</translation>
+    </message>
+    <message>
+        <source>Changes apply to the next stream. Low latency may underrun on unstable links; Smooth playback adds latency to tolerate more jitter.</source>
+        <translation>As alterações serão aplicadas na próxima transmissão. Baixa latência pode causar esvaziamentos do buffer em conexões instáveis; Reprodução estável adiciona latência para tolerar mais jitter.</translation>
     </message>
     <message>
         <location filename="../gui/SettingsView.qml" line="989"/>

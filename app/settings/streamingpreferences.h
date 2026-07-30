@@ -77,6 +77,14 @@ public:
     };
     Q_ENUM(AudioConfig)
 
+    enum AudioLatencyProfile
+    {
+        ALP_DEFAULT,
+        ALP_LOW_LATENCY,
+        ALP_SMOOTH_PLAYBACK,
+    };
+    Q_ENUM(AudioLatencyProfile)
+
     enum VideoCodecConfig
     {
         VCC_AUTO,
@@ -199,6 +207,7 @@ public:
     Q_PROPERTY(bool detectNetworkBlocking MEMBER detectNetworkBlocking NOTIFY detectNetworkBlockingChanged)
     Q_PROPERTY(bool showPerformanceOverlay MEMBER showPerformanceOverlay NOTIFY showPerformanceOverlayChanged)
     Q_PROPERTY(AudioConfig audioConfig MEMBER audioConfig NOTIFY audioConfigChanged)
+    Q_PROPERTY(AudioLatencyProfile audioLatencyProfile MEMBER audioLatencyProfile NOTIFY audioLatencyProfileChanged)
     Q_PROPERTY(VideoCodecConfig videoCodecConfig MEMBER videoCodecConfig NOTIFY videoCodecConfigChanged)
     Q_PROPERTY(bool enableHdr MEMBER enableHdr NOTIFY enableHdrChanged)
     Q_PROPERTY(bool hestiaVirtualDisplay MEMBER hestiaVirtualDisplay NOTIFY hestiaPreferencesChanged)
@@ -252,6 +261,7 @@ public:
     bool keepAwake;
     int packetSize;
     AudioConfig audioConfig;
+    AudioLatencyProfile audioLatencyProfile;
     VideoCodecConfig videoCodecConfig;
     bool enableHdr;
     bool hestiaVirtualDisplay;
@@ -282,6 +292,7 @@ signals:
     void absoluteMouseModeChanged();
     void absoluteTouchModeChanged();
     void audioConfigChanged();
+    void audioLatencyProfileChanged();
     void videoCodecConfigChanged();
     void enableHdrChanged();
     void hestiaPreferencesChanged();

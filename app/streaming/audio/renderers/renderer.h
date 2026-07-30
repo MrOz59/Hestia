@@ -3,6 +3,8 @@
 #include <Limelight.h>
 #include <QtGlobal>
 
+#include "streaming/audio/audiotelemetry.h"
+
 class IAudioRenderer
 {
 public:
@@ -14,6 +16,20 @@ public:
 
     // Return false if an unrecoverable error has occurred and the renderer must be reinitialized
     virtual bool submitAudio(int bytesWritten) = 0;
+
+    virtual const char* rendererName() const noexcept = 0;
+
+    virtual AudioTelemetry::RendererMetrics
+    playbackMetrics() const noexcept
+    {
+        return {};
+    }
+
+    // Prevent a deliberate pause, such as user mute, from being reported as
+    // an output-buffer underrun when playback resumes.
+    virtual void resetPlaybackObservation() noexcept
+    {
+    }
 
     virtual void remapChannels(POPUS_MULTISTREAM_CONFIGURATION) {
         // Use default channel mapping:

@@ -216,20 +216,28 @@ reports of dropouts on Intel N-series mini PCs. Self-contained subsystem
   Opus decode/concealment, recovery drops, renderer failures/reinitializations,
   and the existing RTP audio/FEC counters. The debug overlay now diagnoses
   underruns, network concealment, backpressure, and output-device failure. A
-  persisted audio-latency profile now exposes the buffer-size↔latency tradeoff
-  without changing existing users:
+  persisted audio-latency profile now exposes the buffer-size↔latency tradeoff.
+  Device and queue size selection remains compatible with the previous
+  profiles:
 
-  - **Default:** exact legacy behavior. SDL uses a 10 ms minimum device buffer,
-    three packets, a 50 ms playback limit, and 30 ms receiver backpressure;
-    SLAudio uses 40 ms per stereo pair.
-  - **Low latency:** retains SDL's safe 10 ms floor but uses two packets and
-    30/20 ms queue limits; SLAudio uses 20 ms per stereo pair.
-  - **Smooth playback:** uses a 15 ms/four-packet SDL target and 80/50 ms queue
-    limits; SLAudio uses 60 ms per stereo pair.
+  - **Default:** SDL uses a 10 ms minimum device buffer, three packets, a
+    50 ms playback limit, 30 ms receiver backpressure, and a 10 ms startup
+    reserve; SLAudio uses 40 ms per stereo pair.
+  - **Low latency:** retains SDL's safe 10 ms floor, uses two packets, 30/20 ms
+    queue limits, and a 5 ms startup reserve; SLAudio uses 20 ms per stereo
+    pair.
+  - **Smooth playback:** uses a 15 ms/four-packet SDL target, 80/50 ms queue
+    limits, and a 20 ms startup reserve; SLAudio uses 60 ms per stereo pair.
 
   The pure policy is covered by deterministic tests, the effective profile and
   limits are included in session telemetry, and non-default profiles apply only
-  to the next stream.
+  to the next stream. SDL now starts playback only after accumulating the
+  profile's bounded reserve. If that reserve is exhausted, playback pauses
+  briefly while it is rebuilt; the target rises by 5–10 ms per observed
+  underrun up to 20/30/50 ms for low-latency/default/smooth profiles. Remaining
+  audio is accounted from submitted duration and monotonic elapsed time instead
+  of treating an empty SDL application queue as proof of underrun, because the
+  device may already own an unobservable buffer.
 - **3.2 — A/V sync offset control.** A user-tunable audio delay (ms), persisted
   per device — directly addresses the "audio 300 ms late" class of report. The
   desktop client currently offers no fine audio-delay adjustment.
@@ -239,8 +247,8 @@ reports of dropouts on Intel N-series mini PCs. Self-contained subsystem
 **Acceptance:** a 30-min stream with no audible dropouts on a reference setup;
 A/V offset adjustable and audibly correct.
 
-**Risk:** medium. Audio buffer changes are easy to regress; keep defaults intact
-and make new behavior opt-in until validated.
+**Risk:** medium. Audio buffer changes are easy to regress; keep the adaptive
+reserve bounded and validate its latency on real output devices.
 
 The legacy Limelight audio callback supplies an Opus payload but no media
 presentation timestamp. Consequently, Phase 3 currently reports an estimated

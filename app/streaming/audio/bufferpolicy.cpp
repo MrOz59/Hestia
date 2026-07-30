@@ -34,6 +34,9 @@ Policy sdlPolicy(
         deviceBufferPacketMultiplier = 2;
         result.playbackQueueLimitMs = 30;
         result.upstreamBackpressureLimitMs = 20;
+        result.initialPrebufferMs = 5;
+        result.underrunRecoveryStepMs = 5;
+        result.maximumPrebufferMs = 20;
         break;
     case Profile::SmoothPlayback:
         minimumDeviceBufferSamples =
@@ -43,15 +46,21 @@ Policy sdlPolicy(
         deviceBufferPacketMultiplier = 4;
         result.playbackQueueLimitMs = 80;
         result.upstreamBackpressureLimitMs = 50;
+        result.initialPrebufferMs = 20;
+        result.underrunRecoveryStepMs = 10;
+        result.maximumPrebufferMs = 50;
         break;
     case Profile::Default:
     default:
-        // These are the historical renderer constants. Keep this branch
-        // behaviorally identical for existing users.
+        // Retain the historical device and queue sizing. The startup reserve
+        // below is a separate underrun fix shared by all SDL profiles.
         minimumDeviceBufferSamples = 480;
         deviceBufferPacketMultiplier = 3;
         result.playbackQueueLimitMs = 50;
         result.upstreamBackpressureLimitMs = 30;
+        result.initialPrebufferMs = 10;
+        result.underrunRecoveryStepMs = 5;
+        result.maximumPrebufferMs = 30;
         break;
     }
 
@@ -109,6 +118,40 @@ Policy calculate(
         return slAudioPolicy(profile, format);
     }
     return {};
+}
+
+uint32_t nextRecoveryPrebufferMs(
+        const Policy& policy,
+        uint32_t currentPrebufferMs) noexcept
+{
+    if (policy.maximumPrebufferMs == 0) {
+        return 0;
+    }
+
+    const uint32_t baseline = std::max(
+        currentPrebufferMs,
+        policy.initialPrebufferMs);
+    if (baseline >= policy.maximumPrebufferMs) {
+        return policy.maximumPrebufferMs;
+    }
+
+    return std::min(
+        policy.maximumPrebufferMs,
+        baseline + policy.underrunRecoveryStepMs);
+}
+
+uint64_t drainPlaybackBufferUs(
+        uint64_t bufferedAudioUs,
+        uint64_t elapsedPlaybackUs,
+        uint64_t queuedAudioLowerBoundUs) noexcept
+{
+    const uint64_t remaining =
+            elapsedPlaybackUs >= bufferedAudioUs ?
+                0 :
+                bufferedAudioUs - elapsedPlaybackUs;
+    return std::max(
+        remaining,
+        queuedAudioLowerBoundUs);
 }
 
 const char* profileName(Profile profile) noexcept

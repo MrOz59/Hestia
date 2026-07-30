@@ -767,6 +767,12 @@ private slots:
         QCOMPARE(sdl.playbackQueueLimitMs, uint32_t {50});
         QCOMPARE(sdl.upstreamBackpressureLimitMs,
                  uint32_t {30});
+        QCOMPARE(sdl.initialPrebufferMs,
+                 uint32_t {10});
+        QCOMPARE(sdl.underrunRecoveryStepMs,
+                 uint32_t {5});
+        QCOMPARE(sdl.maximumPrebufferMs,
+                 uint32_t {30});
 
         const AudioBuffer::Policy legacyNonOpusRate =
                 AudioBuffer::calculate(
@@ -825,6 +831,27 @@ private slots:
         QCOMPARE(smooth.playbackQueueLimitMs, uint32_t {80});
         QCOMPARE(smooth.upstreamBackpressureLimitMs,
                  uint32_t {50});
+        QCOMPARE(smooth.initialPrebufferMs,
+                 uint32_t {20});
+        QCOMPARE(smooth.underrunRecoveryStepMs,
+                 uint32_t {10});
+        QCOMPARE(smooth.maximumPrebufferMs,
+                 uint32_t {50});
+        QCOMPARE(
+            AudioBuffer::nextRecoveryPrebufferMs(
+                smooth,
+                smooth.initialPrebufferMs),
+            uint32_t {30});
+        QCOMPARE(
+            AudioBuffer::nextRecoveryPrebufferMs(
+                smooth,
+                uint32_t {40}),
+            uint32_t {50});
+        QCOMPARE(
+            AudioBuffer::nextRecoveryPrebufferMs(
+                smooth,
+                uint32_t {50}),
+            uint32_t {50});
 
         const AudioBuffer::Policy slAudioLow =
                 AudioBuffer::calculate(
@@ -845,6 +872,29 @@ private slots:
                     {});
         QCOMPARE(invalid.deviceBufferSamples, uint32_t {0});
         QCOMPARE(invalid.playbackQueueLimitMs, uint32_t {0});
+        QCOMPARE(
+            AudioBuffer::nextRecoveryPrebufferMs(
+                invalid,
+                uint32_t {20}),
+            uint32_t {0});
+        QCOMPARE(
+            AudioBuffer::drainPlaybackBufferUs(
+                uint64_t {20000},
+                uint64_t {5000},
+                uint64_t {0}),
+            uint64_t {15000});
+        QCOMPARE(
+            AudioBuffer::drainPlaybackBufferUs(
+                uint64_t {20000},
+                uint64_t {25000},
+                uint64_t {0}),
+            uint64_t {0});
+        QCOMPARE(
+            AudioBuffer::drainPlaybackBufferUs(
+                uint64_t {20000},
+                uint64_t {25000},
+                uint64_t {7000}),
+            uint64_t {7000});
         QCOMPARE(
             QString::fromLatin1(
                 AudioBuffer::profileName(

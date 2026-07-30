@@ -9,8 +9,13 @@ SdlAudioRenderer::SdlAudioRenderer(
       m_FrameSize(0),
       m_BytesPerMillisecond(0),
       m_BufferingProfile(profile),
+      m_BufferPolicy {},
       m_Metrics {},
-      m_HasQueuedAudio(false)
+      m_HasQueuedAudio(false),
+      m_IsRebuffering(false),
+      m_PrebufferTargetMs(0),
+      m_EstimatedBufferedAudioUs(0),
+      m_LastPlaybackAccountingUs(0)
 {
     SDL_assert(!SDL_WasInit(SDL_INIT_AUDIO));
 
@@ -31,7 +36,7 @@ bool SdlAudioRenderer::prepareForPlayback(const OPUS_MULTISTREAM_CONFIGURATION* 
     want.format = AUDIO_F32SYS;
     want.channels = opusConfig->channelCount;
 
-    const AudioBuffer::Policy bufferPolicy =
+    m_BufferPolicy =
             AudioBuffer::calculate(
                 m_BufferingProfile,
                 AudioBuffer::Backend::Sdl,
@@ -44,9 +49,10 @@ bool SdlAudioRenderer::prepareForPlayback(const OPUS_MULTISTREAM_CONFIGURATION* 
                         opusConfig->channelCount),
                 });
 
-    // The default policy retains the historical 10 ms PulseAudio safety
-    // floor and three-packet target. Other profiles remain explicit opt-ins.
-    want.samples = bufferPolicy.deviceBufferSamples;
+    // The device-buffer sizing retains the historical PulseAudio safety floor
+    // and packet multipliers. A separate bounded prebuffer below prevents the
+    // device from starting with only the first 5 ms packet available.
+    want.samples = m_BufferPolicy.deviceBufferSamples;
 
     m_FrameSize = opusConfig->samplesPerFrame *
                   opusConfig->channelCount *
@@ -67,9 +73,9 @@ bool SdlAudioRenderer::prepareForPlayback(const OPUS_MULTISTREAM_CONFIGURATION* 
     m_Metrics.deviceBufferDurationMs =
             have.samples * 1000 / have.freq;
     m_Metrics.queueLimitMs =
-            bufferPolicy.playbackQueueLimitMs;
+            m_BufferPolicy.playbackQueueLimitMs;
     m_Metrics.upstreamBackpressureLimitMs =
-            bufferPolicy.upstreamBackpressureLimitMs;
+            m_BufferPolicy.upstreamBackpressureLimitMs;
     m_Metrics.queueDepthObservable = true;
     m_Metrics.deviceRunning = true;
 
@@ -94,8 +100,21 @@ bool SdlAudioRenderer::prepareForPlayback(const OPUS_MULTISTREAM_CONFIGURATION* 
                 "SDL audio driver: %s",
                 SDL_GetCurrentAudioDriver());
 
-    // Start playback
-    SDL_PauseAudioDevice(m_AudioDevice, 0);
+    m_PrebufferTargetMs =
+            m_BufferPolicy.initialPrebufferMs;
+    m_IsRebuffering = m_PrebufferTargetMs != 0;
+    m_EstimatedBufferedAudioUs = 0;
+    m_LastPlaybackAccountingUs =
+            LiGetMicroseconds();
+    if (!m_IsRebuffering) {
+        SDL_PauseAudioDevice(m_AudioDevice, 0);
+    }
+    else {
+        SDL_LogInfo(
+            SDL_LOG_CATEGORY_APPLICATION,
+            "Prebuffering %u ms before audio playback",
+            m_PrebufferTargetMs);
+    }
 
     return true;
 }
@@ -128,17 +147,22 @@ bool SdlAudioRenderer::submitAudio(int bytesWritten)
         return true;
     }
 
+    const uint64_t nowUs = LiGetMicroseconds();
+    updatePlaybackEstimate(nowUs);
     const uint32_t queuedBeforeSubmit =
             queuedDurationMs();
     observeQueueDepth(queuedBeforeSubmit);
-    if (m_HasQueuedAudio && queuedBeforeSubmit == 0) {
+    if (!m_IsRebuffering &&
+            m_HasQueuedAudio &&
+            m_EstimatedBufferedAudioUs == 0) {
         m_Metrics.underruns++;
-        m_HasQueuedAudio = false;
+        beginRebuffering(true, nowUs);
     }
 
     // Don't queue if the receiver already holds more audio than this profile
     // allows.
-    if (LiGetPendingAudioDuration() >
+    if (!m_IsRebuffering &&
+            LiGetPendingAudioDuration() >
             static_cast<int>(
                 m_Metrics.upstreamBackpressureLimitMs)) {
         m_Metrics.backpressureSkippedPackets++;
@@ -159,7 +183,8 @@ bool SdlAudioRenderer::submitAudio(int bytesWritten)
             return false;
         }
 
-        // Only queue more samples where there is 50 ms or less in SDL's queue
+        // Only queue more samples while the SDL queue remains within the
+        // selected profile's bound.
         const uint32_t queuedMs = queuedDurationMs();
         observeQueueDepth(queuedMs);
         if (queuedMs <= m_Metrics.queueLimitMs) {
@@ -186,8 +211,11 @@ bool SdlAudioRenderer::submitAudio(int bytesWritten)
         m_Metrics.submittedPackets++;
         m_Metrics.submittedBytes +=
                 static_cast<uint64_t>(bytesWritten);
+        m_EstimatedBufferedAudioUs +=
+                audioDurationUsForBytes(bytesWritten);
         m_HasQueuedAudio = true;
         observeQueueDepth(queuedDurationMs());
+        resumeIfBuffered(nowUs);
     }
 
     return true;
@@ -215,6 +243,28 @@ SdlAudioRenderer::playbackMetrics() const noexcept
 void SdlAudioRenderer::resetPlaybackObservation() noexcept
 {
     m_HasQueuedAudio = false;
+    if (m_AudioDevice != 0) {
+        SDL_PauseAudioDevice(m_AudioDevice, 1);
+        SDL_ClearQueuedAudio(m_AudioDevice);
+    }
+    m_PrebufferTargetMs =
+            m_BufferPolicy.initialPrebufferMs;
+    m_IsRebuffering = m_PrebufferTargetMs != 0;
+    m_EstimatedBufferedAudioUs = 0;
+    m_LastPlaybackAccountingUs =
+            LiGetMicroseconds();
+    if (!m_IsRebuffering &&
+            m_AudioDevice != 0) {
+        SDL_PauseAudioDevice(m_AudioDevice, 0);
+    }
+}
+
+uint32_t SdlAudioRenderer::queuedAudioBytes() const noexcept
+{
+    if (m_AudioDevice == 0) {
+        return 0;
+    }
+    return SDL_GetQueuedAudioSize(m_AudioDevice);
 }
 
 uint32_t SdlAudioRenderer::queuedDurationMs() const noexcept
@@ -223,7 +273,7 @@ uint32_t SdlAudioRenderer::queuedDurationMs() const noexcept
             m_BytesPerMillisecond == 0) {
         return 0;
     }
-    return SDL_GetQueuedAudioSize(m_AudioDevice) /
+    return queuedAudioBytes() /
             m_BytesPerMillisecond;
 }
 
@@ -235,6 +285,93 @@ void SdlAudioRenderer::observeQueueDepth(
         m_Metrics.highestObservedQueueDurationMs =
                 durationMs;
     }
+}
+
+void SdlAudioRenderer::updatePlaybackEstimate(
+        uint64_t nowUs) noexcept
+{
+    if (m_LastPlaybackAccountingUs == 0) {
+        m_LastPlaybackAccountingUs = nowUs;
+        return;
+    }
+
+    if (!m_IsRebuffering) {
+        const uint64_t elapsedUs =
+                nowUs - m_LastPlaybackAccountingUs;
+        m_EstimatedBufferedAudioUs =
+                AudioBuffer::drainPlaybackBufferUs(
+                    m_EstimatedBufferedAudioUs,
+                    elapsedUs,
+                    // SDL's application queue is a lower bound for remaining
+                    // audio. The device may already own another buffer that
+                    // SDL cannot report.
+                    static_cast<uint64_t>(
+                        queuedDurationMs()) *
+                        1000);
+    }
+    m_LastPlaybackAccountingUs = nowUs;
+}
+
+uint64_t SdlAudioRenderer::audioDurationUsForBytes(
+        int bytes) const noexcept
+{
+    if (bytes <= 0 ||
+            m_BytesPerMillisecond == 0) {
+        return 0;
+    }
+    return static_cast<uint64_t>(bytes) *
+            1000 /
+            m_BytesPerMillisecond;
+}
+
+void SdlAudioRenderer::beginRebuffering(
+        bool raiseTarget,
+        uint64_t nowUs) noexcept
+{
+    if (m_AudioDevice == 0) {
+        return;
+    }
+
+    SDL_PauseAudioDevice(m_AudioDevice, 1);
+    if (raiseTarget) {
+        m_PrebufferTargetMs =
+                AudioBuffer::nextRecoveryPrebufferMs(
+                    m_BufferPolicy,
+                    m_PrebufferTargetMs);
+    }
+    m_IsRebuffering = m_PrebufferTargetMs != 0;
+    m_LastPlaybackAccountingUs = nowUs;
+    if (!m_IsRebuffering) {
+        SDL_PauseAudioDevice(m_AudioDevice, 0);
+    }
+    SDL_LogWarn(
+        SDL_LOG_CATEGORY_APPLICATION,
+        "Audio underrun; rebuilding %u ms playback reserve",
+        m_PrebufferTargetMs);
+}
+
+void SdlAudioRenderer::resumeIfBuffered(
+        uint64_t nowUs) noexcept
+{
+    if (!m_IsRebuffering ||
+            m_EstimatedBufferedAudioUs <
+                static_cast<uint64_t>(
+                    m_PrebufferTargetMs) *
+                    1000) {
+        return;
+    }
+
+    const uint32_t bufferedMs =
+            static_cast<uint32_t>(
+                m_EstimatedBufferedAudioUs /
+                1000);
+    SDL_PauseAudioDevice(m_AudioDevice, 0);
+    m_IsRebuffering = false;
+    m_LastPlaybackAccountingUs = nowUs;
+    SDL_LogInfo(
+        SDL_LOG_CATEGORY_APPLICATION,
+        "Audio playback resumed with %u ms buffered",
+        bufferedMs);
 }
 
 IAudioRenderer::AudioFormat SdlAudioRenderer::getAudioBufferFormat()

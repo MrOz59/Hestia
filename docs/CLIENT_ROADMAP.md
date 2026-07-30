@@ -23,6 +23,22 @@ The ordering below is **technical**, not a copy of the source priority list: we
 start with low-risk, high-leverage work that also produces the telemetry later
 phases depend on, then move into the sensitive pipeline code, then convenience.
 
+## Relationship to the Hermes transport transition
+
+This roadmap tracks user-visible desktop-client quality on the production
+GameStream-compatible path. It runs alongside the longer Hermes/Hestia
+architecture roadmap and must not be read as evidence that the native
+transport is imminent.
+
+The current media wire remains GameStream. C0/C1 telemetry and modularization
+are complete, and C2 improvements are landing behind the existing adapters.
+Optional feedback/recovery extensions, ICE/connectivity, and native
+identity/pairing are planned before the H7/C7 **HDT — Hermes Datagram
+Transport** prototype. HDT therefore remains several prerequisite phases away,
+has no delivery date, and must begin opt-in and disabled by default. Sunshine,
+Apollo, Hermes, and generic GameStream host compatibility remains a release
+requirement throughout the transition.
+
 ## Current-state anchors (verified in the tree)
 
 These already exist and the roadmap builds on them rather than reinventing:
@@ -397,5 +413,11 @@ specific, correct next step.
   probing side-effect free, and a fake sink covers the ninth C1 boundary.
 - ✅ **C1 architecture track complete:** all nine planned seams are injectable
   and retain GameStream adapters.
-- ⏭️ **Next implementation slice:** Phase 3 audio buffer/underrun
-  instrumentation and A/V sync, gated by the Phase 0 telemetry.
+- 🚧 **Phase 3 audio:** renderer/receiver telemetry, the selectable buffer
+  policy, SDL startup reserve, bounded adaptive underrun recovery, and the
+  corrected monotonic buffer accounting are implemented. A/V offset is still
+  unavailable on the timestamp-less GameStream callback and real output
+  devices remain part of the acceptance gate.
+- ⏭️ **Next implementation slice:** add a manual per-device audio offset with
+  zero as the default, local persistence, and telemetry for the applied delay;
+  then harden output-device switching/stall recovery.

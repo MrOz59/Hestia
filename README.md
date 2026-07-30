@@ -23,13 +23,20 @@ opt-in and may be broken. If you need Windows or macOS today, prefer upstream
 
 ## Features
 
-- Hardware accelerated video decoding on Windows, macOS, and Linux.
+- Hardware accelerated video decoding inherited across Windows, macOS, and
+  Linux, with current project validation focused on Linux.
 - H.264, HEVC, and AV1 codec support where supported by the host and GPU.
 - HDR streaming support where supported by the host and platform.
 - Surround sound audio support.
 - Gamepad support, including force feedback and motion controls where supported.
 - Pointer capture and direct mouse control modes.
 - Support for passing system-wide keyboard shortcuts to the host.
+- Per-frame pipeline telemetry, bounded latency distributions, and a
+  plain-language bottleneck diagnosis in the debug overlay.
+- Fast, Balanced, Quality, and handheld Battery Saver presets with
+  Hermes-aware resolution/FPS/codec negotiation.
+- Selectable audio buffering profiles with startup prebuffering and bounded
+  underrun recovery on the SDL path.
 - Apollo/Sunshine-compatible streaming fallback.
 - Hermes protocol support for host capability discovery, session preparation,
   session stop, diagnostics, and optional clipboard sync.
@@ -41,11 +48,13 @@ When connected to Hermes, Hestia can use the host's Hestia protocol v1 API for:
 - Capability detection.
 - Session preparation before streaming.
 - Session cleanup after streaming.
+- Display status/recovery and visibility into the paired client's permissions.
 - Host diagnostics display, including live runtime status: the real encoder
   in use (hardware vs software + codecs), active/streaming sessions, and live
   pipeline metrics (FPS, bitrate, encode time, capture→encode latency, and
   encoded/dropped frames) while a stream is running.
 - Optional clipboard synchronization.
+- Optional execution of commands explicitly configured by the host.
 - Optional host-side display/session preferences.
 
 Hestia does not assume Hermes-only features exist on every host. If a host does
@@ -64,6 +73,42 @@ Moonlight fork, especially the Apollo-oriented client behavior that is useful
 for Hermes as an Apollo-derived host:
 
 - https://github.com/ClassicOldSong/moonlight-android
+
+## Transition plan and the long-term HDT direction
+
+Hestia is not switching away from GameStream in one step. All production media
+streaming currently uses the compatible Moonlight/GameStream path, including
+sessions where the optional Hermes protocol v1 API prepares a display or
+reports diagnostics. That API is a control-layer extension, not the future
+media transport.
+
+The client transition is being built in measured stages:
+
+- C0/C1 established per-frame telemetry and typed boundaries for host protocol,
+  connectivity, transport, video, audio, decoder, presentation, input, and
+  session telemetry while retaining their GameStream adapters.
+- C2 and the client quality roadmap improve the existing path first: pacing,
+  bounded queues, presets, diagnostics, and audio robustness. Audio
+  instrumentation and adaptive SDL prebuffering are present; real-device
+  validation, manual A/V offset, and output-device recovery remain active work.
+- Later paired phases add optional feedback/recovery extensions, ICE and
+  invites, then native identity and pairing. Each step must continue working
+  when the corresponding host capability is absent.
+- Only the later C7/H7 phase introduces the first experimental
+  **HDT — Hermes Datagram Transport** receiver and sender.
+
+HDT is planned as an encrypted UDP transport with frame IDs, packet indexes,
+priorities, deadlines, explicit pacing, feedback, FEC/retransmission decisions,
+and multiplexed media/control/input flows. Its exact wire format is not stable
+or implemented today.
+
+**This is long-term work and is expected to take substantial time.** There is
+no HDT release date, several prerequisite phases are still open, and the first
+version will be opt-in and disabled by default. Hestia will keep connecting to
+Sunshine, Apollo, Hermes, and compatible hosts through GameStream throughout a
+long stabilization period. Automatic selection may be considered only after
+specification, test vectors, security review, cross-platform benchmarks, and
+real-world fallback/reconnection tests exist.
 
 ## Building on Arch / CachyOS
 

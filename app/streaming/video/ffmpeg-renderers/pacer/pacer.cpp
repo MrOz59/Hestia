@@ -19,8 +19,10 @@
 // must not exceed the number buffer pool size to avoid running the decoder
 // out of available decoding surfaces.
 #define MAX_QUEUED_FRAMES 3
-static_assert(PACER_MAX_OUTSTANDING_FRAMES == MAX_QUEUED_FRAMES + 2,
-              "PACER_MAX_OUTSTANDING_FRAMES and MAX_QUEUED_FRAMES must agree");
+static_assert(
+        Pacer::MAX_OUTSTANDING_FRAMES ==
+            MAX_QUEUED_FRAMES + 2,
+        "Scheduler outstanding-frame limit and Pacer queues must agree");
 
 // We may be woken up slightly late so don't go all the way
 // up to the next V-sync since we may accidentally step into
@@ -29,7 +31,10 @@ static_assert(PACER_MAX_OUTSTANDING_FRAMES == MAX_QUEUED_FRAMES + 2,
 // V-sync happens.
 #define TIMER_SLACK_MS 3
 
-Pacer::Pacer(IFFmpegRenderer* renderer, PVIDEO_STATS videoStats) :
+Pacer::Pacer(IFFmpegRenderer* renderer,
+             PVIDEO_STATS videoStats,
+             PipelineTelemetry::FrameTimeline* frameTimeline,
+             SessionTelemetry::ISessionTelemetry* telemetry) :
     m_RenderThread(nullptr),
     m_VsyncThread(nullptr),
     m_DeferredFreeFrame(nullptr),
@@ -44,7 +49,12 @@ Pacer::Pacer(IFFmpegRenderer* renderer, PVIDEO_STATS videoStats) :
     m_MaxVideoFps(0),
     m_DisplayFps(0),
     m_DisplayFpsMillihz(0),
-    m_VideoStats(videoStats)
+    m_VideoStats(videoStats),
+    m_FrameTimeline(frameTimeline),
+    m_Telemetry(
+        telemetry != nullptr ?
+            telemetry :
+            &SessionTelemetry::nullSessionTelemetry())
 {
 
 }
@@ -78,10 +88,22 @@ Pacer::~Pacer()
     // Delete any remaining unconsumed frames
     while (!m_RenderQueue.isEmpty()) {
         AVFrame* frame = m_RenderQueue.dequeue();
+        traceTerminalFrame(
+            frame,
+            0,
+            LiGetMicroseconds(),
+            PipelineTelemetry::FrameOutcome::Dropped,
+            PipelineTelemetry::FrameTerminalReason::Shutdown);
         av_frame_free(&frame);
     }
     while (!m_PacingQueue.isEmpty()) {
         AVFrame* frame = m_PacingQueue.dequeue();
+        traceTerminalFrame(
+            frame,
+            0,
+            LiGetMicroseconds(),
+            PipelineTelemetry::FrameOutcome::Dropped,
+            PipelineTelemetry::FrameTerminalReason::Shutdown);
         av_frame_free(&frame);
     }
     av_frame_free(&m_DeferredFreeFrame);
@@ -253,6 +275,12 @@ void Pacer::handleVsync(int timeUntilNextVsyncMicros)
         // Drop the lock while we call av_frame_free()
         m_FrameQueueLock.unlock();
         m_VideoStats->pacerDroppedFrames++;
+        traceTerminalFrame(
+            frame,
+            0,
+            LiGetMicroseconds(),
+            PipelineTelemetry::FrameOutcome::Dropped,
+            PipelineTelemetry::FrameTerminalReason::PacingBacklog);
         av_frame_free(&frame);
         m_FrameQueueLock.lock();
     }
@@ -373,7 +401,11 @@ void Pacer::renderFrame(AVFrame* frame)
 {
     // Count time spent in Pacer's queues
     uint64_t beforeRender = LiGetMicroseconds();
-    m_VideoStats->totalPacerTimeUs += (beforeRender - (uint64_t)frame->pkt_dts);
+    const auto pacerTimeUs = beforeRender - (uint64_t)frame->pkt_dts;
+    m_VideoStats->totalPacerTimeUs += pacerTimeUs;
+    PipelineTelemetry::recordLatency(
+        m_VideoStats->pacerLatency,
+        PipelineTelemetry::Microseconds {pacerTimeUs});
 
     // Render it
     m_VsyncRenderer->renderFrame(frame);
@@ -387,8 +419,18 @@ void Pacer::renderFrame(AVFrame* frame)
                             1000000000LL / presentationRateMillihertz);
     }
 
-    m_VideoStats->totalRenderTimeUs += (afterRender - beforeRender);
+    const auto renderTimeUs = afterRender - beforeRender;
+    m_VideoStats->totalRenderTimeUs += renderTimeUs;
+    PipelineTelemetry::recordLatency(
+        m_VideoStats->renderLatency,
+        PipelineTelemetry::Microseconds {renderTimeUs});
     m_VideoStats->renderedFrames++;
+    traceTerminalFrame(
+        frame,
+        beforeRender,
+        afterRender,
+        PipelineTelemetry::FrameOutcome::Presented,
+        PipelineTelemetry::FrameTerminalReason::Presented);
 
     // Wait until after next frame to free this one to ensure the GPU
     // doesn't stall or read garbage if the backing buffer gets returned
@@ -444,6 +486,12 @@ void Pacer::renderFrame(AVFrame* frame)
         // Drop the lock while we call av_frame_free()
         m_FrameQueueLock.unlock();
         m_VideoStats->pacerDroppedFrames++;
+        traceTerminalFrame(
+            frame,
+            0,
+            LiGetMicroseconds(),
+            PipelineTelemetry::FrameOutcome::Dropped,
+            PipelineTelemetry::FrameTerminalReason::RenderBacklog);
         av_frame_free(&frame);
         m_FrameQueueLock.lock();
     }
@@ -457,6 +505,12 @@ void Pacer::dropFrameForEnqueue(QQueue<AVFrame*>& queue)
     if (queue.size() == MAX_QUEUED_FRAMES) {
         AVFrame* frame = queue.dequeue();
         m_VideoStats->pacerDroppedFrames++;
+        traceTerminalFrame(
+            frame,
+            0,
+            LiGetMicroseconds(),
+            PipelineTelemetry::FrameOutcome::Dropped,
+            PipelineTelemetry::FrameTerminalReason::QueueLimit);
         av_frame_free(&frame);
     }
 }
@@ -483,6 +537,35 @@ void Pacer::recordQueueDepth(uint32_t (&buckets)[4], int depth)
     buckets[qBound(0, depth, 3)]++;
 }
 
+void Pacer::traceTerminalFrame(
+        AVFrame* frame,
+        uint64_t presentStartUs,
+        uint64_t terminalUs,
+        PipelineTelemetry::FrameOutcome outcome,
+        PipelineTelemetry::FrameTerminalReason reason)
+{
+    if (!m_Telemetry->frameTracingEnabled() ||
+            m_FrameTimeline == nullptr) {
+        return;
+    }
+
+    const auto frameNumber =
+            PipelineTelemetry::frameIdFromTag(frame->opaque);
+    if (!frameNumber) {
+        return;
+    }
+
+    const auto trace = m_FrameTimeline->recordTerminal(
+            *frameNumber,
+            presentStartUs,
+            terminalUs,
+            outcome,
+            reason);
+    if (trace) {
+        m_Telemetry->publishFrameTrace(*trace);
+    }
+}
+
 const char* Pacer::getPresentationPathName() const
 {
     if (m_VsyncSource != nullptr) {
@@ -492,6 +575,17 @@ const char* Pacer::getPresentationPathName() const
         return "renderer VSync (frame pacing disabled)";
     }
     return "renderer-driven VSync";
+}
+
+Pacer::PresentationPath Pacer::getPresentationPath() const
+{
+    if (m_VsyncSource != nullptr) {
+        return PresentationPath::SynchronizedSource;
+    }
+    if (!m_PacingEnabled) {
+        return PresentationPath::RendererVsync;
+    }
+    return PresentationPath::RendererDriven;
 }
 
 int Pacer::getDisplayFpsMillihertz() const

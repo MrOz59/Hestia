@@ -1,12 +1,11 @@
 #include "input.h"
 
-#include <Limelight.h>
 #include "SDL_compat.h"
 #include "streaming/streamutils.h"
 
 void SdlInputHandler::handleMouseButtonEvent(SDL_MouseButtonEvent* event)
 {
-    int button;
+    InputSender::MouseButton button;
 
     if (event->which == SDL_TOUCH_MOUSEID) {
         // Ignore synthetic mouse events
@@ -34,19 +33,19 @@ void SdlInputHandler::handleMouseButtonEvent(SDL_MouseButtonEvent* event)
     switch (event->button)
     {
         case SDL_BUTTON_LEFT:
-            button = BUTTON_LEFT;
+            button = InputSender::MouseButton::Left;
             break;
         case SDL_BUTTON_MIDDLE:
-            button = BUTTON_MIDDLE;
+            button = InputSender::MouseButton::Middle;
             break;
         case SDL_BUTTON_RIGHT:
-            button = BUTTON_RIGHT;
+            button = InputSender::MouseButton::Right;
             break;
         case SDL_BUTTON_X1:
-            button = BUTTON_X1;
+            button = InputSender::MouseButton::Extra1;
             break;
         case SDL_BUTTON_X2:
-            button = BUTTON_X2;
+            button = InputSender::MouseButton::Extra2;
             break;
         default:
             SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
@@ -56,16 +55,17 @@ void SdlInputHandler::handleMouseButtonEvent(SDL_MouseButtonEvent* event)
     }
 
     if (m_SwapMouseButtons) {
-        if (button == BUTTON_RIGHT)
-            button = BUTTON_LEFT;
-        else if (button == BUTTON_LEFT)
-            button = BUTTON_RIGHT;
+        if (button == InputSender::MouseButton::Right)
+            button = InputSender::MouseButton::Left;
+        else if (button == InputSender::MouseButton::Left)
+            button = InputSender::MouseButton::Right;
     }
 
-    LiSendMouseButtonEvent(event->state == SDL_PRESSED ?
-                               BUTTON_ACTION_PRESS :
-                               BUTTON_ACTION_RELEASE,
-                           button);
+    sendMouseButton(
+            button,
+            event->state == SDL_PRESSED ?
+                InputSender::ButtonAction::Press :
+                InputSender::ButtonAction::Release);
 }
 
 void SdlInputHandler::handleMouseMotionEvent(SDL_MouseMotionEvent* event)
@@ -136,7 +136,7 @@ void SdlInputHandler::handleMouseMotionEvent(SDL_MouseMotionEvent* event)
             }
         }
         if (mouseInVideoRegion || m_MouseWasInVideoRegion || m_PendingMouseButtonsAllUpOnVideoRegionLeave) {
-            LiSendMousePositionEvent((short)x, (short)y, dst.w, dst.h);
+            sendAbsolutePointer(x, y, dst.w, dst.h);
         }
 
         // Adjust the cursor visibility if applicable
@@ -152,7 +152,7 @@ void SdlInputHandler::handleMouseMotionEvent(SDL_MouseMotionEvent* event)
         m_MouseWasInVideoRegion = mouseInVideoRegion;
     }
     else {
-        LiSendMouseMoveEvent(xrel, yrel);
+        sendRelativePointer(xrel, yrel);
     }
 }
 
@@ -189,7 +189,10 @@ void SdlInputHandler::handleMouseWheelEvent(SDL_MouseWheelEvent* event)
         event->preciseY = SDL_clamp(event->preciseY, -1.0f, 1.0f);
 #endif
 
-        LiSendHighResScrollEvent((short)(event->preciseY * 120)); // WHEEL_DELTA
+        sendScroll(
+                InputSender::ScrollAxis::Vertical,
+                InputSender::ScrollUnit::WheelDelta,
+                static_cast<int16_t>(event->preciseY * 120));
     }
 
     if (event->preciseX != 0.0f) {
@@ -204,7 +207,10 @@ void SdlInputHandler::handleMouseWheelEvent(SDL_MouseWheelEvent* event)
         event->preciseX = SDL_clamp(event->preciseX, -1.0f, 1.0f);
 #endif
 
-        LiSendHighResHScrollEvent((short)(event->preciseX * 120)); // WHEEL_DELTA
+        sendScroll(
+                InputSender::ScrollAxis::Horizontal,
+                InputSender::ScrollUnit::WheelDelta,
+                static_cast<int16_t>(event->preciseX * 120));
     }
 #else
     if (event->y != 0) {
@@ -218,7 +224,10 @@ void SdlInputHandler::handleMouseWheelEvent(SDL_MouseWheelEvent* event)
         event->y = SDL_clamp(event->y, -1, 1);
 #endif
 
-        LiSendScrollEvent((signed char)event->y);
+        sendScroll(
+                InputSender::ScrollAxis::Vertical,
+                InputSender::ScrollUnit::Clicks,
+                static_cast<int16_t>(event->y));
     }
 
     if (event->x != 0) {
@@ -232,7 +241,10 @@ void SdlInputHandler::handleMouseWheelEvent(SDL_MouseWheelEvent* event)
         event->x = SDL_clamp(event->x, -1, 1);
 #endif
 
-        LiSendHScrollEvent((signed char)event->x);
+        sendScroll(
+                InputSender::ScrollAxis::Horizontal,
+                InputSender::ScrollUnit::Clicks,
+                static_cast<int16_t>(event->x));
     }
 #endif
 }

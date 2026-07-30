@@ -194,9 +194,19 @@ SOURCES += \
     streaming/input/keyboard.cpp \
     streaming/input/mouse.cpp \
     streaming/input/reltouch.cpp \
+    streaming/input/sender/gamestreaminputsender.cpp \
     streaming/hestianegotiation.cpp \
+    streaming/connectivity/gamestreamconnectivityagent.cpp \
+    streaming/protocol/gamestreamhostprotocol.cpp \
+    streaming/protocol/hostprotocol.cpp \
+    streaming/transport/gamestreamclienttransport.cpp \
+    streaming/telemetry/legacysessiontelemetry.cpp \
+    streaming/audio/bufferpolicy.cpp \
+    streaming/audio/audiotelemetry.cpp \
+    streaming/audio/receiver/gamestreamaudioreceiver.cpp \
+    streaming/video/decoder/legacyvideodecoderadapter.cpp \
+    streaming/video/receiver/gamestreamvideoreceiver.cpp \
     streaming/session.cpp \
-    streaming/audio/audio.cpp \
     streaming/audio/renderers/sdlaud.cpp \
     gui/computermodel.cpp \
     gui/appmodel.cpp \
@@ -207,6 +217,7 @@ SOURCES += \
     settings/mappingmanager.cpp \
     gui/sdlgamepadkeynavigation.cpp \
     streaming/video/overlaymanager.cpp \
+    streaming/video/pipelinetelemetry.cpp \
     streaming/video/ffmpeg-renderers/pacer/pacingpolicy.cpp \
     streaming/video/statsdiagnostics.cpp \
     backend/systemproperties.cpp \
@@ -236,7 +247,26 @@ HEADERS += \
     cli/startstream.h \
     settings/streamingpreferences.h \
     streaming/input/input.h \
+    streaming/input/sender/inputsender.h \
+    streaming/input/sender/gamestreaminputsender.h \
     streaming/hestianegotiation.h \
+    streaming/connectivity/connectivityagent.h \
+    streaming/connectivity/gamestreamconnectivityagent.h \
+    streaming/protocol/gamestreamhostprotocol.h \
+    streaming/protocol/hostprotocol.h \
+    streaming/transport/clienttransport.h \
+    streaming/transport/gamestreamclienttransport.h \
+    streaming/telemetry/sessiontelemetry.h \
+    streaming/telemetry/legacysessiontelemetry.h \
+    streaming/audio/bufferpolicy.h \
+    streaming/audio/audiotelemetry.h \
+    streaming/audio/receiver/audioreceiver.h \
+    streaming/audio/receiver/gamestreamaudioreceiver.h \
+    streaming/video/decoder/decoder.h \
+    streaming/video/decoder/legacyvideodecoderadapter.h \
+    streaming/video/receiver/videoreceiver.h \
+    streaming/video/receiver/gamestreamvideoreceiver.h \
+    streaming/video/scheduler/renderscheduler.h \
     streaming/session.h \
     streaming/audio/renderers/renderer.h \
     streaming/audio/renderers/sdl.h \
@@ -250,6 +280,7 @@ HEADERS += \
     settings/mappingmanager.h \
     gui/sdlgamepadkeynavigation.h \
     streaming/video/overlaymanager.h \
+    streaming/video/pipelinetelemetry.h \
     streaming/video/ffmpeg-renderers/pacer/pacingpolicy.h \
     streaming/video/statsdiagnostics.h \
     backend/systemproperties.h
@@ -264,7 +295,8 @@ ffmpeg {
         streaming/video/ffmpeg-renderers/genhwaccel.cpp \
         streaming/video/ffmpeg-renderers/sdlvid.cpp \
         streaming/video/ffmpeg-renderers/swframemapper.cpp \
-        streaming/video/ffmpeg-renderers/pacer/pacer.cpp
+        streaming/video/ffmpeg-renderers/pacer/pacer.cpp \
+        streaming/video/scheduler/legacypaceradapter.cpp
 
     HEADERS += \
         streaming/video/ffmpeg.h \
@@ -272,7 +304,8 @@ ffmpeg {
         streaming/video/ffmpeg-renderers/genhwaccel.h \
         streaming/video/ffmpeg-renderers/sdlvid.h \
         streaming/video/ffmpeg-renderers/swframemapper.h \
-        streaming/video/ffmpeg-renderers/pacer/pacer.h
+        streaming/video/ffmpeg-renderers/pacer/pacer.h \
+        streaming/video/scheduler/legacypaceradapter.h
 }
 libva {
     message(VAAPI renderer selected)

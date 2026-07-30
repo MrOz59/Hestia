@@ -3,17 +3,12 @@
 #include "../../decoder.h"
 #include "../renderer.h"
 #include "pacingpolicy.h"
+#include "streaming/telemetry/sessiontelemetry.h"
 
 #include <QQueue>
 #include <QMutex>
 #include <QWaitCondition>
 #include <atomic>
-
-// The maximum number of frames pacer will ever hold is:
-// - 3 frames in the pacing queue
-// - 1 frame removed from the render queue in the process of rendering
-// - 1 frame for deferred free
-#define PACER_MAX_OUTSTANDING_FRAMES (3 + 1 + 1)
 
 class IVsyncSource {
 public:
@@ -35,7 +30,19 @@ public:
 class Pacer
 {
 public:
-    Pacer(IFFmpegRenderer* renderer, PVIDEO_STATS videoStats);
+    // Three queued frames, one being rendered, and one deferred free.
+    static constexpr uint32_t MAX_OUTSTANDING_FRAMES = 5;
+
+    enum class PresentationPath {
+        SynchronizedSource,
+        RendererVsync,
+        RendererDriven,
+    };
+
+    Pacer(IFFmpegRenderer* renderer,
+          PVIDEO_STATS videoStats,
+          PipelineTelemetry::FrameTimeline* frameTimeline,
+          SessionTelemetry::ISessionTelemetry* telemetry);
 
     ~Pacer();
 
@@ -50,6 +57,8 @@ public:
     void updateNetworkJitter(uint32_t rttMs, uint32_t rttVarianceMs);
 
     const char* getPresentationPathName() const;
+
+    PresentationPath getPresentationPath() const;
 
     int getDisplayFpsMillihertz() const;
 
@@ -69,6 +78,12 @@ private:
     void recordVsyncInterval(uint64_t nowUs, uint64_t targetIntervalUs);
 
     void recordQueueDepth(uint32_t (&buckets)[4], int depth);
+
+    void traceTerminalFrame(AVFrame* frame,
+                            uint64_t presentStartUs,
+                            uint64_t terminalUs,
+                            PipelineTelemetry::FrameOutcome outcome,
+                            PipelineTelemetry::FrameTerminalReason reason);
 
     QQueue<AVFrame*> m_RenderQueue;
     QQueue<AVFrame*> m_PacingQueue;
@@ -97,5 +112,7 @@ private:
     int m_DisplayFpsMillihz;
     PacingPolicy::AdaptiveQueueDepth m_AdaptiveQueueDepth;
     PVIDEO_STATS m_VideoStats;
+    PipelineTelemetry::FrameTimeline* m_FrameTimeline;
+    SessionTelemetry::ISessionTelemetry* m_Telemetry;
     int m_RendererAttributes;
 };

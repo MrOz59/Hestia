@@ -2,13 +2,17 @@
 
 #include <functional>
 #include <QQueue>
+#include <memory>
 #include <set>
 
 #include "../bandwidth.h"
 #include "decoder.h"
-#include "statsdiagnostics.h"
 #include "ffmpeg-renderers/renderer.h"
-#include "ffmpeg-renderers/pacer/pacer.h"
+#include "streaming/telemetry/sessiontelemetry.h"
+
+namespace RenderScheduler {
+class IRenderScheduler;
+}
 
 extern "C" {
 #include <libavcodec/avcodec.h>
@@ -16,7 +20,9 @@ extern "C" {
 
 class FFmpegVideoDecoder : public IVideoDecoder {
 public:
-    FFmpegVideoDecoder(bool testOnly);
+    explicit FFmpegVideoDecoder(
+            bool testOnly,
+            SessionTelemetry::ISessionTelemetry* telemetry = nullptr);
     virtual ~FFmpegVideoDecoder() override;
     virtual bool initialize(PDECODER_PARAMETERS params) override;
     virtual bool isHardwareAccelerated() override;
@@ -51,15 +57,10 @@ private:
                                 TestMode testMode,
                                 bool useAlternateFrontend);
 
-    void stringifyVideoStats(VIDEO_STATS& stats, char* output, int length);
-
-    void appendDiagnosisText(const Diagnostics::Diagnosis& diagnosis,
-                             const Diagnostics::SpikeHistory& history,
-                             char* output, int length);
-
-    void logVideoStats(VIDEO_STATS& stats, const char* title);
-
     void addVideoStats(VIDEO_STATS& src, VIDEO_STATS& dst);
+
+    SessionTelemetry::VideoStreamContext
+    videoStreamContext();
 
     bool createFrontendRenderer(PDECODER_PARAMETERS params, bool useAlternateFrontend);
 
@@ -117,12 +118,14 @@ private:
     IFFmpegRenderer* m_BackendRenderer;
     IFFmpegRenderer* m_FrontendRenderer;
     int m_ConsecutiveFailedDecodes;
-    Pacer* m_Pacer;
+    SessionTelemetry::ISessionTelemetry* m_Telemetry;
+    std::unique_ptr<RenderScheduler::IRenderScheduler>
+            m_RenderScheduler;
     BandwidthTracker m_BwTracker;
     VIDEO_STATS m_ActiveWndVideoStats;
     VIDEO_STATS m_LastWndVideoStats;
     VIDEO_STATS m_GlobalVideoStats;
-    Diagnostics::SpikeHistory m_SpikeHistory;
+    PipelineTelemetry::FrameTimeline m_FrameTimeline;
     std::set<IFFmpegRenderer::RendererType> m_FailedRenderers;
 
     int m_FramesIn;

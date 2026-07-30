@@ -3,6 +3,7 @@
 #include <Limelight.h>
 #include "SDL_compat.h"
 #include "settings/streamingpreferences.h"
+#include "pipelinetelemetry.h"
 
 #define SDL_CODE_FRAME_READY 0
 
@@ -23,6 +24,12 @@ typedef struct _VIDEO_STATS {
     uint64_t totalDecodeTimeUs;                // high-res (1us)
     uint64_t totalPacerTimeUs;                 // high-res (1us)
     uint64_t totalRenderTimeUs;                // high-res (1us)
+    PipelineTelemetry::LatencyHistogram reassemblyLatency;
+    PipelineTelemetry::LatencyHistogram decodeLatency;
+    PipelineTelemetry::LatencyHistogram pacerLatency;
+    PipelineTelemetry::LatencyHistogram renderLatency;
+    PipelineTelemetry::QueueDepthHistogram rtpFecQueueDepth;
+    uint32_t decoderQueueDepth[4];              // samples at depth 0/1/2/3+
     uint32_t pacingQueueDepth[4];               // samples at depth 0/1/2/3+
     uint32_t renderQueueDepth[4];               // samples at depth 0/1/2/3+
     uint32_t pacingQueueTarget;                 // latest adaptive target

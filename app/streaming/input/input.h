@@ -2,10 +2,16 @@
 
 #include "settings/streamingpreferences.h"
 #include "backend/computermanager.h"
+#include "streaming/input/sender/inputsender.h"
 
 #include "SDL_compat.h"
 
+#include <atomic>
+
+class SdlInputHandler;
+
 struct GamepadState {
+    SdlInputHandler* inputHandler;
     SDL_GameController* controller;
     SDL_JoystickID jsId;
     short index;
@@ -32,7 +38,7 @@ struct GamepadState {
     uint32_t lastAccelEventTime;
 #endif
 
-    int buttons;
+    uint32_t buttons;
     short lsX, lsY;
     short rsX, rsY;
     unsigned char lt, rt;
@@ -84,7 +90,11 @@ struct DualSenseOutputReport{
 class SdlInputHandler
 {
 public:
-    explicit SdlInputHandler(StreamingPreferences& prefs, int streamWidth, int streamHeight);
+    explicit SdlInputHandler(
+            StreamingPreferences& prefs,
+            int streamWidth,
+            int streamHeight,
+            InputSender::IInputSender& inputSender);
 
     ~SdlInputHandler();
 
@@ -188,6 +198,31 @@ private:
 
     void performSpecialKeyCombo(KeyCombo combo);
 
+    InputSender::EventMetadata nextEventMetadata(
+            uint32_t deviceId,
+            bool replaceable = false) noexcept;
+
+    void sendMouseButton(
+            InputSender::MouseButton button,
+            InputSender::ButtonAction action);
+
+    void sendRelativePointer(
+            int32_t deltaX,
+            int32_t deltaY,
+            uint32_t deviceId = 0);
+
+    void sendAbsolutePointer(
+            int32_t x,
+            int32_t y,
+            int32_t referenceWidth,
+            int32_t referenceHeight);
+
+    void sendScroll(
+            InputSender::ScrollAxis axis,
+            InputSender::ScrollUnit unit,
+            int16_t delta,
+            uint32_t deviceId = 0);
+
     static
     Uint32 longPressTimerCallback(Uint32 interval, void* param);
 
@@ -204,6 +239,8 @@ private:
     Uint32 dragTimerCallback(Uint32 interval, void* param);
 
     SDL_Window* m_Window;
+    InputSender::IInputSender& m_InputSender;
+    std::atomic<uint64_t> m_NextInputSequence;
     bool m_MultiController;
     bool m_GamepadMouse;
     bool m_SwapMouseButtons;
@@ -247,8 +284,9 @@ private:
     SDL_TimerID m_LeftButtonReleaseTimer;
     SDL_TimerID m_RightButtonReleaseTimer;
     SDL_TimerID m_DragTimer;
-    char m_DragButton;
+    InputSender::MouseButton m_DragButton;
+    bool m_DragButtonDown;
     int m_NumFingersDown;
 
-    static const int k_ButtonMap[];
+    static const uint32_t k_ButtonMap[];
 };

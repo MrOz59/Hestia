@@ -23,15 +23,28 @@
 #define ML_HAPTIC_SIMPLE_RUMBLE     (1U << 17)
 #define ML_HAPTIC_GC_TRIGGER_RUMBLE (1U << 18)
 
-const int SdlInputHandler::k_ButtonMap[] = {
-    A_FLAG, B_FLAG, X_FLAG, Y_FLAG,
-    BACK_FLAG, SPECIAL_FLAG, PLAY_FLAG,
-    LS_CLK_FLAG, RS_CLK_FLAG,
-    LB_FLAG, RB_FLAG,
-    UP_FLAG, DOWN_FLAG, LEFT_FLAG, RIGHT_FLAG,
-    MISC_FLAG,
-    PADDLE1_FLAG, PADDLE2_FLAG, PADDLE3_FLAG, PADDLE4_FLAG,
-    TOUCHPAD_FLAG,
+const uint32_t SdlInputHandler::k_ButtonMap[] = {
+    InputSender::ControllerButtonA,
+    InputSender::ControllerButtonB,
+    InputSender::ControllerButtonX,
+    InputSender::ControllerButtonY,
+    InputSender::ControllerButtonBack,
+    InputSender::ControllerButtonGuide,
+    InputSender::ControllerButtonStart,
+    InputSender::ControllerButtonLeftStick,
+    InputSender::ControllerButtonRightStick,
+    InputSender::ControllerButtonLeftShoulder,
+    InputSender::ControllerButtonRightShoulder,
+    InputSender::ControllerButtonDpadUp,
+    InputSender::ControllerButtonDpadDown,
+    InputSender::ControllerButtonDpadLeft,
+    InputSender::ControllerButtonDpadRight,
+    InputSender::ControllerButtonMisc,
+    InputSender::ControllerButtonPaddle1,
+    InputSender::ControllerButtonPaddle2,
+    InputSender::ControllerButtonPaddle3,
+    InputSender::ControllerButtonPaddle4,
+    InputSender::ControllerButtonTouchpad,
 };
 
 GamepadState*
@@ -56,14 +69,16 @@ void SdlInputHandler::sendGamepadState(GamepadState* state)
     SDL_assert(m_GamepadMask == 0x1 || m_MultiController);
 
     // Handle Select+PS as the clickpad button on PS4/5 controllers without a clickpad mapping
-    int buttons = state->buttons;
+    uint32_t buttons = state->buttons;
     if (state->clickpadButtonEmulationEnabled) {
-        if (state->buttons == (BACK_FLAG | SPECIAL_FLAG)) {
-            buttons = MISC_FLAG;
+        if (state->buttons ==
+                (InputSender::ControllerButtonBack |
+                 InputSender::ControllerButtonGuide)) {
+            buttons = InputSender::ControllerButtonMisc;
             state->emulatedClickpadButtonDown = true;
         }
         else if (state->emulatedClickpadButtonDown) {
-            buttons &= ~MISC_FLAG;
+            buttons &= ~InputSender::ControllerButtonMisc;
             state->emulatedClickpadButtonDown = false;
         }
     }
@@ -101,21 +116,24 @@ void SdlInputHandler::sendGamepadState(GamepadState* state)
         }
     }
 
-    LiSendMultiControllerEvent(state->index,
-                               m_GamepadMask,
-                               buttons,
-                               lt,
-                               rt,
-                               lsX,
-                               lsY,
-                               rsX,
-                               rsY);
+    m_InputSender.sendControllerState({
+        nextEventMetadata(static_cast<uint32_t>(state->index)),
+        static_cast<uint16_t>(state->index),
+        static_cast<uint16_t>(m_GamepadMask),
+        buttons,
+        lt,
+        rt,
+        lsX,
+        lsY,
+        rsX,
+        rsY,
+    });
 }
 
 void SdlInputHandler::sendGamepadBatteryState(GamepadState* state, SDL_JoystickPowerLevel level)
 {
     uint8_t batteryPercentage;
-    uint8_t batteryState;
+    InputSender::BatteryState batteryState;
 
     // SDL's battery reporting capabilities are quite limited. Notably, we cannot
     // tell the battery level while charging (or even if a battery is present).
@@ -123,34 +141,39 @@ void SdlInputHandler::sendGamepadBatteryState(GamepadState* state, SDL_JoystickP
     switch (level)
     {
     case SDL_JOYSTICK_POWER_UNKNOWN:
-        batteryState = LI_BATTERY_STATE_UNKNOWN;
-        batteryPercentage = LI_BATTERY_PERCENTAGE_UNKNOWN;
+        batteryState = InputSender::BatteryState::Unknown;
+        batteryPercentage = InputSender::UnknownBatteryPercentage;
         break;
     case SDL_JOYSTICK_POWER_WIRED:
-        batteryState = LI_BATTERY_STATE_CHARGING;
-        batteryPercentage = LI_BATTERY_PERCENTAGE_UNKNOWN;
+        batteryState = InputSender::BatteryState::Charging;
+        batteryPercentage = InputSender::UnknownBatteryPercentage;
         break;
     case SDL_JOYSTICK_POWER_EMPTY:
-        batteryState = LI_BATTERY_STATE_DISCHARGING;
+        batteryState = InputSender::BatteryState::Discharging;
         batteryPercentage = 5;
         break;
     case SDL_JOYSTICK_POWER_LOW:
-        batteryState = LI_BATTERY_STATE_DISCHARGING;
+        batteryState = InputSender::BatteryState::Discharging;
         batteryPercentage = 20;
         break;
     case SDL_JOYSTICK_POWER_MEDIUM:
-        batteryState = LI_BATTERY_STATE_DISCHARGING;
+        batteryState = InputSender::BatteryState::Discharging;
         batteryPercentage = 50;
         break;
     case SDL_JOYSTICK_POWER_FULL:
-        batteryState = LI_BATTERY_STATE_DISCHARGING;
+        batteryState = InputSender::BatteryState::Discharging;
         batteryPercentage = 90;
         break;
     default:
         return;
     }
 
-    LiSendControllerBatteryEvent(state->index, batteryState, batteryPercentage);
+    m_InputSender.sendControllerBattery({
+        nextEventMetadata(static_cast<uint32_t>(state->index)),
+        static_cast<uint16_t>(state->index),
+        batteryState,
+        batteryPercentage,
+    });
 }
 
 Uint32 SdlInputHandler::mouseEmulationTimerCallback(Uint32 interval, void *param)
@@ -182,7 +205,10 @@ Uint32 SdlInputHandler::mouseEmulationTimerCallback(Uint32 interval, void *param
     deltaY = qAbs(deltaY) > MOUSE_EMULATION_DEADZONE ? deltaY - MOUSE_EMULATION_DEADZONE : 0;
 
     if (deltaX != 0 || deltaY != 0) {
-        LiSendMouseMoveEvent((short)deltaX, (short)deltaY);
+        gamepad->inputHandler->sendRelativePointer(
+                static_cast<int32_t>(deltaX),
+                static_cast<int32_t>(deltaY),
+                static_cast<uint32_t>(gamepad->index));
     }
 
     return interval;
@@ -291,31 +317,57 @@ void SdlInputHandler::handleControllerButtonEvent(SDL_ControllerButtonEvent* eve
         }
         else if (state->mouseEmulationTimer != 0) {
             if (event->button == SDL_CONTROLLER_BUTTON_A) {
-                LiSendMouseButtonEvent(BUTTON_ACTION_PRESS, BUTTON_LEFT);
+                sendMouseButton(
+                        InputSender::MouseButton::Left,
+                        InputSender::ButtonAction::Press);
             }
             else if (event->button == SDL_CONTROLLER_BUTTON_B) {
-                LiSendMouseButtonEvent(BUTTON_ACTION_PRESS, BUTTON_RIGHT);
+                sendMouseButton(
+                        InputSender::MouseButton::Right,
+                        InputSender::ButtonAction::Press);
             }
             else if (event->button == SDL_CONTROLLER_BUTTON_X) {
-                LiSendMouseButtonEvent(BUTTON_ACTION_PRESS, BUTTON_MIDDLE);
+                sendMouseButton(
+                        InputSender::MouseButton::Middle,
+                        InputSender::ButtonAction::Press);
             }
             else if (event->button == SDL_CONTROLLER_BUTTON_LEFTSHOULDER) {
-                LiSendMouseButtonEvent(BUTTON_ACTION_PRESS, BUTTON_X1);
+                sendMouseButton(
+                        InputSender::MouseButton::Extra1,
+                        InputSender::ButtonAction::Press);
             }
             else if (event->button == SDL_CONTROLLER_BUTTON_RIGHTSHOULDER) {
-                LiSendMouseButtonEvent(BUTTON_ACTION_PRESS, BUTTON_X2);
+                sendMouseButton(
+                        InputSender::MouseButton::Extra2,
+                        InputSender::ButtonAction::Press);
             }
             else if (event->button == SDL_CONTROLLER_BUTTON_DPAD_UP) {
-                LiSendScrollEvent(1);
+                sendScroll(
+                        InputSender::ScrollAxis::Vertical,
+                        InputSender::ScrollUnit::Clicks,
+                        1,
+                        static_cast<uint32_t>(state->index));
             }
             else if (event->button == SDL_CONTROLLER_BUTTON_DPAD_DOWN) {
-                LiSendScrollEvent(-1);
+                sendScroll(
+                        InputSender::ScrollAxis::Vertical,
+                        InputSender::ScrollUnit::Clicks,
+                        -1,
+                        static_cast<uint32_t>(state->index));
             }
             else if (event->button == SDL_CONTROLLER_BUTTON_DPAD_RIGHT) {
-                LiSendHScrollEvent(1);
+                sendScroll(
+                        InputSender::ScrollAxis::Horizontal,
+                        InputSender::ScrollUnit::Clicks,
+                        1,
+                        static_cast<uint32_t>(state->index));
             }
             else if (event->button == SDL_CONTROLLER_BUTTON_DPAD_LEFT) {
-                LiSendHScrollEvent(-1);
+                sendScroll(
+                        InputSender::ScrollAxis::Horizontal,
+                        InputSender::ScrollUnit::Clicks,
+                        -1,
+                        static_cast<uint32_t>(state->index));
             }
         }
     }
@@ -346,25 +398,40 @@ void SdlInputHandler::handleControllerButtonEvent(SDL_ControllerButtonEvent* eve
         }
         else if (state->mouseEmulationTimer != 0) {
             if (event->button == SDL_CONTROLLER_BUTTON_A) {
-                LiSendMouseButtonEvent(BUTTON_ACTION_RELEASE, BUTTON_LEFT);
+                sendMouseButton(
+                        InputSender::MouseButton::Left,
+                        InputSender::ButtonAction::Release);
             }
             else if (event->button == SDL_CONTROLLER_BUTTON_B) {
-                LiSendMouseButtonEvent(BUTTON_ACTION_RELEASE, BUTTON_RIGHT);
+                sendMouseButton(
+                        InputSender::MouseButton::Right,
+                        InputSender::ButtonAction::Release);
             }
             else if (event->button == SDL_CONTROLLER_BUTTON_X) {
-                LiSendMouseButtonEvent(BUTTON_ACTION_RELEASE, BUTTON_MIDDLE);
+                sendMouseButton(
+                        InputSender::MouseButton::Middle,
+                        InputSender::ButtonAction::Release);
             }
             else if (event->button == SDL_CONTROLLER_BUTTON_LEFTSHOULDER) {
-                LiSendMouseButtonEvent(BUTTON_ACTION_RELEASE, BUTTON_X1);
+                sendMouseButton(
+                        InputSender::MouseButton::Extra1,
+                        InputSender::ButtonAction::Release);
             }
             else if (event->button == SDL_CONTROLLER_BUTTON_RIGHTSHOULDER) {
-                LiSendMouseButtonEvent(BUTTON_ACTION_RELEASE, BUTTON_X2);
+                sendMouseButton(
+                        InputSender::MouseButton::Extra2,
+                        InputSender::ButtonAction::Release);
             }
         }
     }
 
     // Handle Start+Select+L1+R1 as a gamepad quit combo
-    if (state->buttons == (PLAY_FLAG | BACK_FLAG | LB_FLAG | RB_FLAG) && qgetenv("NO_GAMEPAD_QUIT") != "1") {
+    if (state->buttons ==
+                (InputSender::ControllerButtonStart |
+                 InputSender::ControllerButtonBack |
+                 InputSender::ControllerButtonLeftShoulder |
+                 InputSender::ControllerButtonRightShoulder) &&
+            qgetenv("NO_GAMEPAD_QUIT") != "1") {
         SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
                     "Detected quit gamepad button combo");
 
@@ -375,13 +442,20 @@ void SdlInputHandler::handleControllerButtonEvent(SDL_ControllerButtonEvent* eve
         SDL_PushEvent(&event);
 
         // Clear buttons down on this gamepad
-        LiSendMultiControllerEvent(state->index, m_GamepadMask,
-                                   0, 0, 0, 0, 0, 0, 0);
+        m_InputSender.sendControllerState({
+            nextEventMetadata(static_cast<uint32_t>(state->index)),
+            static_cast<uint16_t>(state->index),
+            static_cast<uint16_t>(m_GamepadMask),
+        });
         return;
     }
 
     // Handle Select+L1+R1+X as a gamepad overlay combo
-    if (state->buttons == (BACK_FLAG | LB_FLAG | RB_FLAG | X_FLAG)) {
+    if (state->buttons ==
+            (InputSender::ControllerButtonBack |
+             InputSender::ControllerButtonLeftShoulder |
+             InputSender::ControllerButtonRightShoulder |
+             InputSender::ControllerButtonX)) {
         SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
                     "Detected stats toggle gamepad combo");
 
@@ -390,8 +464,11 @@ void SdlInputHandler::handleControllerButtonEvent(SDL_ControllerButtonEvent* eve
                                                             !Session::get()->getOverlayManager().isOverlayEnabled(Overlay::OverlayDebug));
 
         // Clear buttons down on this gamepad
-        LiSendMultiControllerEvent(state->index, m_GamepadMask,
-                                   0, 0, 0, 0, 0, 0, 0);
+        m_InputSender.sendControllerState({
+            nextEventMetadata(static_cast<uint32_t>(state->index)),
+            static_cast<uint16_t>(state->index),
+            static_cast<uint16_t>(m_GamepadMask),
+        });
         return;
     }
 
@@ -418,7 +495,16 @@ void SdlInputHandler::handleControllerSensorEvent(SDL_ControllerSensorEvent* eve
             memcpy(state->lastAccelEventData, event->data, sizeof(event->data));
             state->lastAccelEventTime = event->timestamp;
 
-            LiSendControllerMotionEvent((uint8_t)state->index, LI_MOTION_TYPE_ACCEL, event->data[0], event->data[1], event->data[2]);
+            m_InputSender.sendControllerMotion({
+                nextEventMetadata(
+                        static_cast<uint32_t>(state->index),
+                        true),
+                static_cast<uint16_t>(state->index),
+                InputSender::MotionType::Accelerometer,
+                event->data[0],
+                event->data[1],
+                event->data[2],
+            });
         }
         break;
     case SDL_SENSOR_GYRO:
@@ -429,10 +515,16 @@ void SdlInputHandler::handleControllerSensorEvent(SDL_ControllerSensorEvent* eve
             state->lastGyroEventTime = event->timestamp;
 
             // Convert rad/s to deg/s
-            LiSendControllerMotionEvent((uint8_t)state->index, LI_MOTION_TYPE_GYRO,
-                                        event->data[0] * 57.2957795f,
-                                        event->data[1] * 57.2957795f,
-                                        event->data[2] * 57.2957795f);
+            m_InputSender.sendControllerMotion({
+                nextEventMetadata(
+                        static_cast<uint32_t>(state->index),
+                        true),
+                static_cast<uint16_t>(state->index),
+                InputSender::MotionType::Gyroscope,
+                event->data[0] * 57.2957795f,
+                event->data[1] * 57.2957795f,
+                event->data[2] * 57.2957795f,
+            });
         }
         break;
     }
@@ -445,24 +537,33 @@ void SdlInputHandler::handleControllerTouchpadEvent(SDL_ControllerTouchpadEvent*
         return;
     }
 
-    uint8_t eventType;
+    InputSender::ContactEventType eventType;
     switch (event->type) {
     case SDL_CONTROLLERTOUCHPADDOWN:
-        eventType = LI_TOUCH_EVENT_DOWN;
+        eventType = InputSender::ContactEventType::Down;
         break;
     case SDL_CONTROLLERTOUCHPADUP:
-        eventType = LI_TOUCH_EVENT_UP;
+        eventType = InputSender::ContactEventType::Up;
         break;
     case SDL_CONTROLLERTOUCHPADMOTION:
-        eventType = LI_TOUCH_EVENT_MOVE;
+        eventType = InputSender::ContactEventType::Move;
         break;
     default:
         return;
     }
 
-    LiSendControllerTouchEvent2((uint8_t)state->index, eventType,
-                                (uint8_t)event->touchpad, event->finger,
-                                event->x, event->y, event->pressure);
+    m_InputSender.sendControllerTouch({
+        nextEventMetadata(
+                static_cast<uint32_t>(state->index),
+                eventType == InputSender::ContactEventType::Move),
+        static_cast<uint16_t>(state->index),
+        eventType,
+        static_cast<uint8_t>(event->touchpad),
+        static_cast<uint32_t>(event->finger),
+        event->x,
+        event->y,
+        event->pressure,
+    });
 }
 
 #endif
@@ -549,6 +650,7 @@ void SdlInputHandler::handleControllerDeviceEvent(SDL_ControllerDeviceEvent* eve
         }
 
         state = &m_GamepadState[i];
+        state->inputHandler = this;
         if (m_MultiController) {
             state->index = i;
 
@@ -650,47 +752,52 @@ void SdlInputHandler::handleControllerDeviceEvent(SDL_ControllerDeviceEvent* eve
             }
         }
 
-        uint32_t capabilities = 0;
+        uint16_t capabilities = InputSender::ControllerCapabilityNone;
         if (SDL_GameControllerGetBindForAxis(state->controller, SDL_CONTROLLER_AXIS_TRIGGERLEFT).bindType == SDL_CONTROLLER_BINDTYPE_AXIS ||
             SDL_GameControllerGetBindForAxis(state->controller, SDL_CONTROLLER_AXIS_TRIGGERRIGHT).bindType == SDL_CONTROLLER_BINDTYPE_AXIS) {
             // We assume these are analog triggers if the binding is to an axis rather than a button
-            capabilities |= LI_CCAP_ANALOG_TRIGGERS;
+            capabilities |=
+                    InputSender::ControllerCapabilityAnalogTriggers;
         }
         if (hapticCaps & ML_HAPTIC_GC_RUMBLE) {
-            capabilities |= LI_CCAP_RUMBLE;
+            capabilities |= InputSender::ControllerCapabilityRumble;
         }
         if (hapticCaps & ML_HAPTIC_GC_TRIGGER_RUMBLE) {
-            capabilities |= LI_CCAP_TRIGGER_RUMBLE;
+            capabilities |=
+                    InputSender::ControllerCapabilityTriggerRumble;
         }
         if (SDL_GameControllerGetNumTouchpads(state->controller) > 0) {
-            capabilities |= LI_CCAP_TOUCHPAD;
+            capabilities |= InputSender::ControllerCapabilityTouchpad;
             if (SDL_GameControllerGetNumTouchpads(state->controller) > 1) {
-                capabilities |= LI_CCAP_DUAL_TOUCHPAD;
+                capabilities |=
+                        InputSender::ControllerCapabilityDualTouchpad;
             }
         }
         if (SDL_GameControllerHasSensor(state->controller, SDL_SENSOR_ACCEL)) {
-            capabilities |= LI_CCAP_ACCEL;
+            capabilities |=
+                    InputSender::ControllerCapabilityAccelerometer;
         }
         if (SDL_GameControllerHasSensor(state->controller, SDL_SENSOR_GYRO)) {
-            capabilities |= LI_CCAP_GYRO;
+            capabilities |=
+                    InputSender::ControllerCapabilityGyroscope;
         }
         if (powerLevel != SDL_JOYSTICK_POWER_UNKNOWN || SDL_VERSION_ATLEAST(2, 24, 0)) {
-            capabilities |= LI_CCAP_BATTERY_STATE;
+            capabilities |= InputSender::ControllerCapabilityBattery;
         }
         if (SDL_GameControllerHasLED(state->controller)) {
-            capabilities |= LI_CCAP_RGB_LED;
+            capabilities |= InputSender::ControllerCapabilityRgbLed;
         }
 
-        uint8_t type;
+        InputSender::ControllerKind type;
         switch (SDL_GameControllerGetType(state->controller)) {
         case SDL_CONTROLLER_TYPE_XBOX360:
         case SDL_CONTROLLER_TYPE_XBOXONE:
-            type = LI_CTYPE_XBOX;
+            type = InputSender::ControllerKind::Xbox;
             break;
         case SDL_CONTROLLER_TYPE_PS3:
         case SDL_CONTROLLER_TYPE_PS4:
         case SDL_CONTROLLER_TYPE_PS5:
-            type = LI_CTYPE_PS;
+            type = InputSender::ControllerKind::PlayStation;
             break;
         case SDL_CONTROLLER_TYPE_NINTENDO_SWITCH_PRO:
 #if SDL_VERSION_ATLEAST(2, 24, 0)
@@ -698,10 +805,10 @@ void SdlInputHandler::handleControllerDeviceEvent(SDL_ControllerDeviceEvent* eve
         case SDL_CONTROLLER_TYPE_NINTENDO_SWITCH_JOYCON_RIGHT:
         case SDL_CONTROLLER_TYPE_NINTENDO_SWITCH_JOYCON_PAIR:
 #endif
-            type = LI_CTYPE_NINTENDO;
+            type = InputSender::ControllerKind::Nintendo;
             break;
         default:
-            type = LI_CTYPE_UNKNOWN;
+            type = InputSender::ControllerKind::Unknown;
             break;
         }
 
@@ -711,9 +818,16 @@ void SdlInputHandler::handleControllerDeviceEvent(SDL_ControllerDeviceEvent* eve
 #if SDL_VERSION_ATLEAST(2, 0, 14)
             SDL_GameControllerGetBindForButton(state->controller, SDL_CONTROLLER_BUTTON_TOUCHPAD).bindType == SDL_CONTROLLER_BINDTYPE_NONE &&
 #endif
-            type == LI_CTYPE_PS;
+            type == InputSender::ControllerKind::PlayStation;
 
-        LiSendControllerArrivalEvent(state->index, m_GamepadMask, type, supportedButtonFlags, capabilities);
+        m_InputSender.sendControllerArrival({
+            nextEventMetadata(static_cast<uint32_t>(state->index)),
+            static_cast<uint16_t>(state->index),
+            static_cast<uint16_t>(m_GamepadMask),
+            type,
+            supportedButtonFlags,
+            capabilities,
+        });
 #else
 
         // Send an empty event to tell the PC we've arrived
@@ -755,8 +869,11 @@ void SdlInputHandler::handleControllerDeviceEvent(SDL_ControllerDeviceEvent* eve
                         state->index);
 
             // Send a final event to let the PC know this gamepad is gone
-            LiSendMultiControllerEvent(state->index, m_GamepadMask,
-                                       0, 0, 0, 0, 0, 0, 0);
+            m_InputSender.sendControllerState({
+                nextEventMetadata(static_cast<uint32_t>(state->index)),
+                static_cast<uint16_t>(state->index),
+                static_cast<uint16_t>(m_GamepadMask),
+            });
 
             // Clear all remaining state from this slot
             SDL_memset(state, 0, sizeof(*state));

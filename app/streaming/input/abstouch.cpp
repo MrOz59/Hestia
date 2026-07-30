@@ -1,6 +1,5 @@
 #include "input.h"
 
-#include <Limelight.h>
 #include "SDL_compat.h"
 #include <SDL_syswm.h>
 #include "streaming/streamutils.h"
@@ -19,11 +18,19 @@
 // How far the finger can move before it can override the double tap deadzone
 #define DOUBLE_TAP_DEAD_ZONE_DELTA 0.025f
 
-Uint32 SdlInputHandler::longPressTimerCallback(Uint32, void*)
+Uint32 SdlInputHandler::longPressTimerCallback(
+        Uint32,
+        void* param)
 {
+    auto handler = static_cast<SdlInputHandler*>(param);
+
     // Raise the left click and start a right click
-    LiSendMouseButtonEvent(BUTTON_ACTION_RELEASE, BUTTON_LEFT);
-    LiSendMouseButtonEvent(BUTTON_ACTION_PRESS, BUTTON_RIGHT);
+    handler->sendMouseButton(
+            InputSender::MouseButton::Left,
+            InputSender::ButtonAction::Release);
+    handler->sendMouseButton(
+            InputSender::MouseButton::Right,
+            InputSender::ButtonAction::Press);
 
     return 0;
 }
@@ -79,16 +86,16 @@ void SdlInputHandler::handleAbsoluteFingerEvent(SDL_TouchFingerEvent* event)
     float vidrelx = qMin(qMax((int)(event->x * windowWidth), dst.x), dst.x + dst.w) - dst.x;
     float vidrely = qMin(qMax((int)(event->y * windowHeight), dst.y), dst.y + dst.h) - dst.y;
 
-    uint8_t eventType;
+    InputSender::ContactEventType eventType;
     switch (event->type) {
     case SDL_FINGERDOWN:
-        eventType = LI_TOUCH_EVENT_DOWN;
+        eventType = InputSender::ContactEventType::Down;
         break;
     case SDL_FINGERMOTION:
-        eventType = LI_TOUCH_EVENT_MOVE;
+        eventType = InputSender::ContactEventType::Move;
         break;
     case SDL_FINGERUP:
-        eventType = LI_TOUCH_EVENT_UP;
+        eventType = InputSender::ContactEventType::Up;
         break;
     default:
         return;
@@ -110,7 +117,7 @@ void SdlInputHandler::handleAbsoluteFingerEvent(SDL_TouchFingerEvent* event)
     }
 
     // Try to send it as a native pen/touch event, otherwise fall back to our touch emulation
-    if (LiGetHostFeatureFlags() & LI_FF_PEN_TOUCH_EVENTS) {
+    if (m_InputSender.capabilities().nativePenTouch) {
 #if SDL_VERSION_ATLEAST(2, 0, 22)
         bool isPen = false;
 
@@ -127,14 +134,40 @@ void SdlInputHandler::handleAbsoluteFingerEvent(SDL_TouchFingerEvent* event)
         }
 
         if (isPen) {
-            LiSendPenEvent(eventType, LI_TOOL_TYPE_PEN, 0, vidrelx / dst.w, vidrely / dst.h, event->pressure,
-                           0.0f, 0.0f, LI_ROT_UNKNOWN, LI_TILT_UNKNOWN);
+            m_InputSender.sendPen({
+                nextEventMetadata(
+                        0,
+                        eventType ==
+                            InputSender::ContactEventType::Move),
+                eventType,
+                InputSender::PenTool::Pen,
+                InputSender::PenButtonNone,
+                vidrelx / dst.w,
+                vidrely / dst.h,
+                event->pressure,
+                0.0f,
+                0.0f,
+                InputSender::UnknownRotation,
+                InputSender::UnknownTilt,
+            });
         }
         else
 #endif
         {
-            LiSendTouchEvent(eventType, pointerId, vidrelx / dst.w, vidrely / dst.h, event->pressure,
-                             0.0f, 0.0f, LI_ROT_UNKNOWN);
+            m_InputSender.sendTouch({
+                nextEventMetadata(
+                        0,
+                        eventType ==
+                            InputSender::ContactEventType::Move),
+                eventType,
+                pointerId,
+                vidrelx / dst.w,
+                vidrely / dst.h,
+                event->pressure,
+                0.0f,
+                0.0f,
+                InputSender::UnknownRotation,
+            });
         }
 
         if (!m_DisabledTouchFeedback) {
@@ -197,7 +230,7 @@ void SdlInputHandler::emulateAbsoluteFingerEvent(SDL_TouchFingerEvent* event)
         short y = qMin(qMax((int)(event->y * windowHeight), dst.y), dst.y + dst.h);
 
         // Update the cursor position relative to the video region
-        LiSendMousePositionEvent(x - dst.x, y - dst.y, dst.w, dst.h);
+        sendAbsolutePointer(x - dst.x, y - dst.y, dst.w, dst.h);
     }
 
     if (event->type == SDL_FINGERDOWN) {
@@ -207,10 +240,12 @@ void SdlInputHandler::emulateAbsoluteFingerEvent(SDL_TouchFingerEvent* event)
         SDL_RemoveTimer(m_LongPressTimer);
         m_LongPressTimer = SDL_AddTimer(LONG_PRESS_ACTIVATION_DELAY,
                                         longPressTimerCallback,
-                                        nullptr);
+                                        this);
 
         // Left button down on finger down
-        LiSendMouseButtonEvent(BUTTON_ACTION_PRESS, BUTTON_LEFT);
+        sendMouseButton(
+                InputSender::MouseButton::Left,
+                InputSender::ButtonAction::Press);
     }
     else if (event->type == SDL_FINGERUP) {
         m_LastTouchUpEvent = *event;
@@ -220,9 +255,13 @@ void SdlInputHandler::emulateAbsoluteFingerEvent(SDL_TouchFingerEvent* event)
         m_LongPressTimer = 0;
 
         // Left button up on finger up
-        LiSendMouseButtonEvent(BUTTON_ACTION_RELEASE, BUTTON_LEFT);
+        sendMouseButton(
+                InputSender::MouseButton::Left,
+                InputSender::ButtonAction::Release);
 
         // Raise right button too in case we triggered a long press gesture
-        LiSendMouseButtonEvent(BUTTON_ACTION_RELEASE, BUTTON_RIGHT);
+        sendMouseButton(
+                InputSender::MouseButton::Right,
+                InputSender::ButtonAction::Release);
     }
 }

@@ -1,6 +1,5 @@
 #include "streaming/session.h"
 
-#include <Limelight.h>
 #include "SDL_compat.h"
 
 #define VK_0 0x30
@@ -114,7 +113,10 @@ void SdlInputHandler::performSpecialKeyCombo(KeyCombo combo)
             }
 
             // Send this text to the PC
-            LiSendUtf8TextEvent(text, (unsigned int)strlen(text));
+            m_InputSender.sendText({
+                nextEventMetadata(0),
+                std::string(text, strlen(text)),
+            });
 
             // SDL_GetClipboardText() allocates, so we must free
             SDL_free((void*)text);
@@ -176,7 +178,7 @@ void SdlInputHandler::performSpecialKeyCombo(KeyCombo combo)
 void SdlInputHandler::handleKeyEvent(SDL_KeyboardEvent* event)
 {
     short keyCode;
-    char modifiers;
+    uint8_t modifiers;
     bool shouldNotConvertToScanCodeOnServer = false;
 
     if (event->repeat) {
@@ -219,17 +221,17 @@ void SdlInputHandler::handleKeyEvent(SDL_KeyboardEvent* event)
     // Set modifier flags
     modifiers = 0;
     if (event->keysym.mod & KMOD_CTRL) {
-        modifiers |= MODIFIER_CTRL;
+        modifiers |= InputSender::KeyboardModifierControl;
     }
     if (event->keysym.mod & KMOD_ALT) {
-        modifiers |= MODIFIER_ALT;
+        modifiers |= InputSender::KeyboardModifierAlt;
     }
     if (event->keysym.mod & KMOD_SHIFT) {
-        modifiers |= MODIFIER_SHIFT;
+        modifiers |= InputSender::KeyboardModifierShift;
     }
     if (event->keysym.mod & KMOD_GUI) {
         if (isSystemKeyCaptureActive()) {
-            modifiers |= MODIFIER_META;
+            modifiers |= InputSender::KeyboardModifierMeta;
         }
     }
 
@@ -472,9 +474,13 @@ void SdlInputHandler::handleKeyEvent(SDL_KeyboardEvent* event)
         m_KeysDown.remove(keyCode);
     }
 
-    LiSendKeyboardEvent2(0x8000 | keyCode,
-                        event->state == SDL_PRESSED ?
-                            KEY_ACTION_DOWN : KEY_ACTION_UP,
-                        modifiers,
-                        shouldNotConvertToScanCodeOnServer ? SS_KBE_FLAG_NON_NORMALIZED : 0);
+    m_InputSender.sendKeyboard({
+        nextEventMetadata(0),
+        static_cast<uint16_t>(keyCode),
+        event->state == SDL_PRESSED ?
+            InputSender::KeyAction::Down :
+            InputSender::KeyAction::Up,
+        modifiers,
+        shouldNotConvertToScanCodeOnServer,
+    });
 }

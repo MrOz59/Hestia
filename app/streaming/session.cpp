@@ -2,6 +2,16 @@
 #include "settings/streamingpreferences.h"
 #include "streaming/streamutils.h"
 #include "streaming/hestianegotiation.h"
+#include "streaming/connectivity/gamestreamconnectivityagent.h"
+#include "streaming/audio/receiver/gamestreamaudioreceiver.h"
+#include "streaming/input/sender/gamestreaminputsender.h"
+#include "streaming/telemetry/legacysessiontelemetry.h"
+#include "streaming/protocol/gamestreamhostprotocol.h"
+#include "streaming/transport/gamestreamclienttransport.h"
+#include "streaming/video/decoder.h"
+#include "streaming/video/decoder/legacyvideodecoderadapter.h"
+#include "streaming/video/receiver/gamestreamvideoreceiver.h"
+#include "backend/nvhttp.h"
 #include "backend/richpresencemanager.h"
 #include "backend/hestiacapabilities.h"
 
@@ -33,6 +43,10 @@
 
 #include <openssl/rand.h>
 
+#include <algorithm>
+#include <iterator>
+#include <utility>
+
 #include <QtEndian>
 #include <QCoreApplication>
 #include <QThreadPool>
@@ -42,7 +56,6 @@
 #include <QGuiApplication>
 #include <QClipboard>
 #include <QCursor>
-#include <QJsonObject>
 #include <QScreen>
 #include <QtMath>
 
@@ -71,12 +84,63 @@ CONNECTION_LISTENER_CALLBACKS Session::k_ConnCallbacks = {
 Session* Session::s_ActiveSession;
 QSemaphore Session::s_ActiveSessionSemaphore(1);
 
+namespace {
+
+AudioReceiver::Configuration audioReceiverConfiguration(
+        int legacyConfiguration)
+{
+    return {
+        static_cast<uint8_t>(
+            CHANNEL_COUNT_FROM_AUDIO_CONFIGURATION(
+                legacyConfiguration)),
+        static_cast<uint32_t>(
+            CHANNEL_MASK_FROM_AUDIO_CONFIGURATION(
+                legacyConfiguration)),
+    };
+}
+
+std::unique_ptr<SessionTelemetry::ISessionTelemetry>
+sessionTelemetryOrDefault(
+        std::unique_ptr<SessionTelemetry::ISessionTelemetry>
+                telemetry,
+        Overlay::OverlayManager* overlayManager)
+{
+    if (telemetry) {
+        return telemetry;
+    }
+    return std::make_unique<
+        SessionTelemetry::LegacySessionTelemetry>(
+            overlayManager);
+}
+
+AudioBuffer::Profile audioBufferProfile(
+        StreamingPreferences::AudioLatencyProfile profile)
+{
+    switch (profile) {
+    case StreamingPreferences::ALP_LOW_LATENCY:
+        return AudioBuffer::Profile::LowLatency;
+    case StreamingPreferences::ALP_SMOOTH_PLAYBACK:
+        return AudioBuffer::Profile::SmoothPlayback;
+    case StreamingPreferences::ALP_DEFAULT:
+    default:
+        return AudioBuffer::Profile::Default;
+    }
+}
+
+} // namespace
+
 void Session::clStageStarting(int stage)
 {
     // We know this is called on the same thread as LiStartConnection()
     // which happens to be the main thread, so it's cool to interact
     // with the GUI in these callbacks.
-    emit s_ActiveSession->stageStarting(QString::fromLocal8Bit(LiGetStageName(stage)));
+    const SessionTelemetry::StageEvent event {
+        stage,
+        QString::fromLocal8Bit(LiGetStageName(stage)),
+    };
+    s_ActiveSession->m_SessionTelemetry->publishStageStarted(
+        event);
+    emit s_ActiveSession->stageStarting(event.name);
 }
 
 void Session::clStageFailed(int stage, int errorCode)
@@ -87,13 +151,36 @@ void Session::clStageFailed(int stage, int errorCode)
 
     char failingPorts[128];
     LiStringifyPortFlags(portFlags, ", ", failingPorts, sizeof(failingPorts));
-    emit s_ActiveSession->stageFailed(QString::fromLocal8Bit(LiGetStageName(stage)), errorCode, QString(failingPorts));
+    const SessionTelemetry::StageFailure event {
+        {
+            stage,
+            QString::fromLocal8Bit(LiGetStageName(stage)),
+        },
+        errorCode,
+        QString::fromLocal8Bit(failingPorts),
+    };
+    s_ActiveSession->m_SessionTelemetry->publishStageFailed(
+        event);
+    emit s_ActiveSession->stageFailed(
+        event.stage.name,
+        event.errorCode,
+        event.failingPorts);
 }
 
 void Session::clConnectionTerminated(int errorCode)
 {
     unsigned int portFlags = LiGetPortFlagsFromTerminationErrorCode(errorCode);
     s_ActiveSession->m_PortTestResults = LiTestClientConnectivity(CONN_TEST_SERVER, 443, portFlags);
+    QString failingPorts;
+    if (portFlags != 0) {
+        char ports[128];
+        LiStringifyPortFlags(
+            portFlags,
+            ", ",
+            ports,
+            sizeof(ports));
+        failingPorts = QString::fromLocal8Bit(ports);
+    }
 
     // Display the termination dialog if this was not intended
     switch (errorCode) {
@@ -103,11 +190,9 @@ void Session::clConnectionTerminated(int errorCode)
     case ML_ERROR_NO_VIDEO_TRAFFIC:
         s_ActiveSession->m_UnexpectedTermination = true;
 
-        char ports[128];
         SDL_assert(portFlags != 0);
-        LiStringifyPortFlags(portFlags, ", ", ports, sizeof(ports));
         emit s_ActiveSession->displayLaunchError(tr("No video received from host.") + "\n\n"+
-                                                 tr("Check your firewall and port forwarding rules for port(s): %1").arg(ports));
+                                                 tr("Check your firewall and port forwarding rules for port(s): %1").arg(failingPorts));
         break;
 
     case ML_ERROR_NO_VIDEO_FRAME:
@@ -138,9 +223,11 @@ void Session::clConnectionTerminated(int errorCode)
         break;
     }
 
-    SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
-                 "Connection terminated: %d",
-                 errorCode);
+    s_ActiveSession->m_SessionTelemetry->publishTermination({
+        errorCode,
+        s_ActiveSession->m_UnexpectedTermination,
+        failingPorts,
+    });
 
     // Push a quit event to the main loop
     SDL_Event event;
@@ -176,31 +263,24 @@ void Session::clRumble(unsigned short controllerNumber, unsigned short lowFreqMo
 
 void Session::clConnectionStatusUpdate(int connectionStatus)
 {
-    SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
-                "Connection status update: %d",
-                connectionStatus);
-
-    if (!s_ActiveSession->m_Preferences->connectionWarnings) {
-        return;
+    SessionTelemetry::ConnectionQuality quality =
+            SessionTelemetry::ConnectionQuality::Unknown;
+    if (connectionStatus == CONN_STATUS_POOR) {
+        quality = SessionTelemetry::ConnectionQuality::Poor;
+    }
+    else if (connectionStatus == CONN_STATUS_OKAY) {
+        quality = SessionTelemetry::ConnectionQuality::Okay;
     }
 
-    if (s_ActiveSession->m_MouseEmulationRefCount > 0) {
-        // Don't display the overlay if mouse emulation is already using it
-        return;
-    }
-
-    switch (connectionStatus)
-    {
-    case CONN_STATUS_POOR:
-        s_ActiveSession->m_OverlayManager.updateOverlayText(Overlay::OverlayStatusUpdate,
-                                                            s_ActiveSession->m_StreamConfig.bitrate > 5000 ?
-                                                                "Slow connection to PC\nReduce your bitrate" : "Poor connection to PC");
-        s_ActiveSession->m_OverlayManager.setOverlayState(Overlay::OverlayStatusUpdate, true);
-        break;
-    case CONN_STATUS_OKAY:
-        s_ActiveSession->m_OverlayManager.setOverlayState(Overlay::OverlayStatusUpdate, false);
-        break;
-    }
+    s_ActiveSession->m_SessionTelemetry
+        ->publishConnectionQuality({
+            connectionStatus,
+            quality,
+            static_cast<uint32_t>(
+                qMax(0, s_ActiveSession->m_StreamConfig.bitrate)),
+            s_ActiveSession->m_Preferences->connectionWarnings,
+            s_ActiveSession->m_MouseEmulationRefCount > 0,
+        });
 }
 
 void Session::clSetHdrMode(bool enabled)
@@ -209,7 +289,8 @@ void Session::clSetHdrMode(bool enabled)
     // this callback, we'll drop it. The main thread will make the
     // callback when it finishes creating the new decoder.
     if (SDL_TryLockMutex(s_ActiveSession->m_DecoderLock) == 0) {
-        IVideoDecoder* decoder = s_ActiveSession->m_VideoDecoder;
+        Decoder::IDecoder* decoder =
+                s_ActiveSession->m_VideoDecoder;
         if (decoder != nullptr) {
             decoder->setHdrMode(enabled);
         }
@@ -283,9 +364,14 @@ void Session::clSetAdaptiveTriggers(uint16_t controllerNumber, uint8_t eventFlag
 bool Session::chooseDecoder(StreamingPreferences::VideoDecoderSelection vds,
                             StreamingPreferences::RendererSelection renderer,
                             SDL_Window* window, int videoFormat, int width, int height,
-                            int frameRate, bool enableVsync, bool enableFramePacing, bool testOnly, IVideoDecoder*& chosenDecoder)
+                            int frameRate, bool enableVsync,
+                            bool enableFramePacing, bool testOnly,
+                            Decoder::IDecoder*& chosenDecoder,
+                            SessionTelemetry::ISessionTelemetry* telemetry)
 {
     DECODER_PARAMETERS params;
+    IVideoDecoder* legacyDecoder = nullptr;
+    chosenDecoder = nullptr;
 
     // We should never have vsync enabled for test-mode.
     // It introduces unnecessary delay for renderers that may
@@ -308,8 +394,11 @@ bool Session::chooseDecoder(StreamingPreferences::VideoDecoderSelection vds,
                 enableVsync ? "enabled" : "disabled");
 
 #ifdef HAVE_SLVIDEO
-    chosenDecoder = new SLVideoDecoder(testOnly);
-    if (chosenDecoder->initialize(&params)) {
+    legacyDecoder = new SLVideoDecoder(testOnly);
+    if (legacyDecoder->initialize(&params)) {
+        chosenDecoder =
+                new Decoder::LegacyVideoDecoderAdapter(
+                    legacyDecoder);
         SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
                     "SLVideo video decoder chosen");
         return true;
@@ -317,14 +406,19 @@ bool Session::chooseDecoder(StreamingPreferences::VideoDecoderSelection vds,
     else {
         SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
                      "Unable to load SLVideo decoder");
-        delete chosenDecoder;
-        chosenDecoder = nullptr;
+        delete legacyDecoder;
+        legacyDecoder = nullptr;
     }
 #endif
 
 #ifdef HAVE_FFMPEG
-    chosenDecoder = new FFmpegVideoDecoder(testOnly);
-    if (chosenDecoder->initialize(&params)) {
+    legacyDecoder = new FFmpegVideoDecoder(
+        testOnly,
+        telemetry);
+    if (legacyDecoder->initialize(&params)) {
+        chosenDecoder =
+                new Decoder::LegacyVideoDecoderAdapter(
+                    legacyDecoder);
         SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
                     "FFmpeg-based video decoder chosen");
         return true;
@@ -332,8 +426,8 @@ bool Session::chooseDecoder(StreamingPreferences::VideoDecoderSelection vds,
     else {
         SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
                      "Unable to load FFmpeg decoder");
-        delete chosenDecoder;
-        chosenDecoder = nullptr;
+        delete legacyDecoder;
+        legacyDecoder = nullptr;
     }
 #endif
 
@@ -345,57 +439,11 @@ bool Session::chooseDecoder(StreamingPreferences::VideoDecoderSelection vds,
     return false;
 }
 
-int Session::drSetup(int videoFormat, int width, int height, int frameRate, void *, int)
-{
-    s_ActiveSession->m_ActiveVideoFormat = videoFormat;
-    s_ActiveSession->m_ActiveVideoWidth = width;
-    s_ActiveSession->m_ActiveVideoHeight = height;
-    s_ActiveSession->m_ActiveVideoFrameRate = frameRate;
-
-    // Defer decoder setup until we've started streaming so we
-    // don't have to hide and show the SDL window (which seems to
-    // cause pointer hiding to break on Windows).
-
-    SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "Video stream is %dx%dx%d (format 0x%x)",
-                width, height, frameRate, videoFormat);
-
-    return 0;
-}
-
-int Session::drSubmitDecodeUnit(PDECODE_UNIT du)
-{
-    // Use a lock since we'll be yanking this decoder out
-    // from underneath the session when we initiate destruction.
-    // We need to destroy the decoder on the main thread to satisfy
-    // some API constraints (like DXVA2). If we can't acquire it,
-    // that means the decoder is about to be destroyed, so we can
-    // safely return DR_OK and wait for the IDR frame request by
-    // the decoder reinitialization code.
-
-    if (SDL_TryLockMutex(s_ActiveSession->m_DecoderLock) == 0) {
-        IVideoDecoder* decoder = s_ActiveSession->m_VideoDecoder;
-        if (decoder != nullptr) {
-            int ret = decoder->submitDecodeUnit(du);
-            SDL_UnlockMutex(s_ActiveSession->m_DecoderLock);
-            return ret;
-        }
-        else {
-            SDL_UnlockMutex(s_ActiveSession->m_DecoderLock);
-            return DR_OK;
-        }
-    }
-    else {
-        // Decoder is going away. Ignore anything coming in until
-        // the lock is released.
-        return DR_OK;
-    }
-}
-
 void Session::getDecoderInfo(SDL_Window* window,
                              bool& isHardwareAccelerated, bool& isFullScreenOnly,
                              bool& isHdrSupported, QSize& maxResolution)
 {
-    IVideoDecoder* decoder;
+    Decoder::IDecoder* decoder;
 
     // Since AV1 support on the host side is in its infancy, let's not consider
     // _only_ a working AV1 decoder to be acceptable and still show the warning
@@ -406,10 +454,14 @@ void Session::getDecoderInfo(SDL_Window* window,
                       StreamingPreferences::RS_PROBE_ONLY,
                       window, VIDEO_FORMAT_H265_MAIN10, 1920, 1080, 60,
                       false, false, true, decoder)) {
-        isHardwareAccelerated = decoder->isHardwareAccelerated();
-        isFullScreenOnly = decoder->isAlwaysFullScreen();
-        isHdrSupported = decoder->isHdrSupported();
-        maxResolution = decoder->getDecoderMaxResolution();
+        const Decoder::Properties& properties =
+                decoder->properties();
+        isHardwareAccelerated =
+                properties.capabilities.hardwareAccelerated;
+        isFullScreenOnly =
+                properties.capabilities.alwaysFullScreen;
+        isHdrSupported = properties.capabilities.hdr;
+        maxResolution = properties.maximumResolution;
         delete decoder;
 
         return;
@@ -423,7 +475,7 @@ void Session::getDecoderInfo(SDL_Window* window,
         // If we've got a working AV1 Main 10-bit decoder, we'll enable the HDR checkbox
         // but we will still continue probing to get other attributes for HEVC or H.264
         // decoders. See the AV1 comment at the top of the function for more info.
-        isHdrSupported = decoder->isHdrSupported();
+        isHdrSupported = decoder->properties().capabilities.hdr;
         delete decoder;
     }
     else {
@@ -437,7 +489,8 @@ void Session::getDecoderInfo(SDL_Window* window,
                           StreamingPreferences::RS_PROBE_ONLY,
                           window, VIDEO_FORMAT_AV1_MAIN10, 1920, 1080, 60,
                           false, false, true, decoder)) {
-            isHdrSupported = decoder->isHdrSupported();
+            isHdrSupported =
+                    decoder->properties().capabilities.hdr;
             delete decoder;
         }
         else {
@@ -452,9 +505,13 @@ void Session::getDecoderInfo(SDL_Window* window,
                       StreamingPreferences::RS_PROBE_ONLY,
                       window, VIDEO_FORMAT_H265, 1920, 1080, 60,
                       false, false, true, decoder)) {
-        isHardwareAccelerated = decoder->isHardwareAccelerated();
-        isFullScreenOnly = decoder->isAlwaysFullScreen();
-        maxResolution = decoder->getDecoderMaxResolution();
+        const Decoder::Properties& properties =
+                decoder->properties();
+        isHardwareAccelerated =
+                properties.capabilities.hardwareAccelerated;
+        isFullScreenOnly =
+                properties.capabilities.alwaysFullScreen;
+        maxResolution = properties.maximumResolution;
         delete decoder;
 
         return;
@@ -466,9 +523,13 @@ void Session::getDecoderInfo(SDL_Window* window,
                       StreamingPreferences::RS_PROBE_ONLY,
                       window, VIDEO_FORMAT_AV1_MAIN8, 1920, 1080, 60,
                       false, false, true, decoder)) {
-        isHardwareAccelerated = decoder->isHardwareAccelerated();
-        isFullScreenOnly = decoder->isAlwaysFullScreen();
-        maxResolution = decoder->getDecoderMaxResolution();
+        const Decoder::Properties& properties =
+                decoder->properties();
+        isHardwareAccelerated =
+                properties.capabilities.hardwareAccelerated;
+        isFullScreenOnly =
+                properties.capabilities.alwaysFullScreen;
+        maxResolution = properties.maximumResolution;
         delete decoder;
 
         return;
@@ -481,9 +542,13 @@ void Session::getDecoderInfo(SDL_Window* window,
                       StreamingPreferences::RS_PROBE_ONLY,
                       window, VIDEO_FORMAT_H264, 1920, 1080, 60,
                       false, false, true, decoder)) {
-        isHardwareAccelerated = decoder->isHardwareAccelerated();
-        isFullScreenOnly = decoder->isAlwaysFullScreen();
-        maxResolution = decoder->getDecoderMaxResolution();
+        const Decoder::Properties& properties =
+                decoder->properties();
+        isHardwareAccelerated =
+                properties.capabilities.hardwareAccelerated;
+        isFullScreenOnly =
+                properties.capabilities.alwaysFullScreen;
+        maxResolution = properties.maximumResolution;
         delete decoder;
 
         return;
@@ -498,7 +563,7 @@ Session::getDecoderAvailability(SDL_Window* window,
                                 StreamingPreferences::VideoDecoderSelection vds,
                                 int videoFormat, int width, int height, int frameRate)
 {
-    IVideoDecoder* decoder;
+    Decoder::IDecoder* decoder;
 
     if (!chooseDecoder(vds,
                        StreamingPreferences::RS_PROBE_ONLY,
@@ -507,7 +572,8 @@ Session::getDecoderAvailability(SDL_Window* window,
         return DecoderAvailability::None;
     }
 
-    bool hw = decoder->isHardwareAccelerated();
+    const bool hw =
+            decoder->properties().capabilities.hardwareAccelerated;
 
     delete decoder;
 
@@ -516,7 +582,7 @@ Session::getDecoderAvailability(SDL_Window* window,
 
 bool Session::populateDecoderProperties(SDL_Window* window)
 {
-    IVideoDecoder* decoder;
+    Decoder::IDecoder* decoder;
 
     // NB: We pass the real renderer selection rather than RS_PROBE_ONLY
     // here because this is operating on the real streaming window, and
@@ -533,14 +599,24 @@ bool Session::populateDecoderProperties(SDL_Window* window)
         return false;
     }
 
-    m_VideoCallbacks.capabilities = decoder->getDecoderCapabilities();
-    if (m_VideoCallbacks.capabilities & CAPABILITY_PULL_RENDERER) {
-        // It is an error to pass a push callback when in pull mode
-        m_VideoCallbacks.submitDecodeUnit = nullptr;
-    }
-    else {
-        m_VideoCallbacks.submitDecodeUnit = drSubmitDecodeUnit;
-    }
+    const Decoder::Properties& decoderProperties =
+            decoder->properties();
+    const Decoder::Capabilities& decoderCapabilities =
+            decoderProperties.capabilities;
+    VideoReceiver::Capabilities receiverCapabilities;
+    receiverCapabilities.directSubmit =
+            decoderCapabilities.directSubmit;
+    receiverCapabilities.pullRenderer =
+            decoderCapabilities.pullRenderer;
+    receiverCapabilities.referenceFrameInvalidationH264 =
+            decoderCapabilities.referenceFrameInvalidationH264;
+    receiverCapabilities.referenceFrameInvalidationHevc =
+            decoderCapabilities.referenceFrameInvalidationHevc;
+    receiverCapabilities.referenceFrameInvalidationAv1 =
+            decoderCapabilities.referenceFrameInvalidationAv1;
+    receiverCapabilities.slicesPerFrame =
+            decoderCapabilities.slicesPerFrame;
+    m_VideoReceiver->configure(receiverCapabilities);
 
     if (Utils::getEnvironmentVariableOverride("COLOR_SPACE_OVERRIDE", &m_StreamConfig.colorSpace)) {
         SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
@@ -548,7 +624,8 @@ bool Session::populateDecoderProperties(SDL_Window* window)
                     m_StreamConfig.colorSpace);
     }
     else {
-        m_StreamConfig.colorSpace = decoder->getDecoderColorspace();
+        m_StreamConfig.colorSpace =
+                static_cast<int>(decoderProperties.colorSpace);
     }
 
     if (Utils::getEnvironmentVariableOverride("COLOR_RANGE_OVERRIDE", &m_StreamConfig.colorRange)) {
@@ -557,10 +634,11 @@ bool Session::populateDecoderProperties(SDL_Window* window)
                     m_StreamConfig.colorRange);
     }
     else {
-        m_StreamConfig.colorRange = decoder->getDecoderColorRange();
+        m_StreamConfig.colorRange =
+                static_cast<int>(decoderProperties.colorRange);
     }
 
-    if (decoder->isAlwaysFullScreen()) {
+    if (decoderCapabilities.alwaysFullScreen) {
         m_IsFullScreen = true;
     }
 
@@ -569,15 +647,83 @@ bool Session::populateDecoderProperties(SDL_Window* window)
     return true;
 }
 
-Session::Session(NvComputer* computer, NvApp& app, StreamingPreferences *preferences)
+Session::Session(
+        NvComputer* computer,
+        NvApp& app,
+        StreamingPreferences* preferences,
+        std::unique_ptr<HostProtocol::IHostProtocol> hostProtocol,
+        std::unique_ptr<ClientTransport::IClientTransport> clientTransport,
+        std::unique_ptr<Connectivity::IConnectivityAgent> connectivityAgent,
+        std::unique_ptr<VideoReceiver::IVideoReceiver> videoReceiver,
+        std::unique_ptr<AudioReceiver::IAudioReceiver> audioReceiver,
+        std::unique_ptr<InputSender::IInputSender> inputSender,
+        std::unique_ptr<SessionTelemetry::ISessionTelemetry>
+                sessionTelemetry)
     : m_Preferences(preferences ? preferences : StreamingPreferences::get()),
       m_IsFullScreen(m_Preferences->windowMode != StreamingPreferences::WM_WINDOWED || !WMUtils::isRunningDesktopEnvironment()),
       m_Computer(computer),
+      m_HostProtocol(hostProtocol ?
+                         std::move(hostProtocol) :
+                         std::make_unique<HostProtocol::GameStreamHostProtocol>(
+                             computer)),
+      m_ConnectivityAgent(
+              connectivityAgent ?
+                  std::move(connectivityAgent) :
+                  std::make_unique<
+                      Connectivity::GameStreamConnectivityAgent>(computer)),
+      m_RtspSessionUrl(),
       m_App(app),
       m_Window(nullptr),
       m_VideoDecoder(nullptr),
       m_DecoderLock(SDL_CreateMutex()),
-      m_AudioMuted(false),
+      m_OverlayManager(),
+      m_SessionTelemetry(
+              sessionTelemetryOrDefault(
+                  std::move(sessionTelemetry),
+                  &m_OverlayManager)),
+      m_VideoReceiver(
+              videoReceiver ?
+                  std::move(videoReceiver) :
+                  std::make_unique<
+                      VideoReceiver::GameStreamVideoReceiver>(
+                      VideoReceiver::GameStreamVideoReceiverContext {
+                          &m_VideoDecoder,
+                          m_DecoderLock,
+                          &m_ActiveVideoFormat,
+                          &m_ActiveVideoWidth,
+                          &m_ActiveVideoHeight,
+                          &m_ActiveVideoFrameRate,
+                      })),
+      m_AudioReceiver(
+              audioReceiver ?
+                  std::move(audioReceiver) :
+                  std::make_unique<
+                      AudioReceiver::GameStreamAudioReceiver>(
+                          m_SessionTelemetry.get())),
+      m_InputSender(
+              inputSender ?
+                  std::move(inputSender) :
+                  std::make_unique<
+                      InputSender::GameStreamInputSender>()),
+      m_ClientTransport(clientTransport ?
+                            std::move(clientTransport) :
+                            std::make_unique<
+                                ClientTransport::GameStreamClientTransport>(
+                                ClientTransport::GameStreamContext {
+                                    m_ConnectivityAgent.get(),
+                                    &m_RtspSessionUrl,
+                                    computer->appVersion,
+                                    computer->gfeVersion,
+                                    computer->serverCodecModeSupport,
+                                    &m_StreamConfig,
+                                    &k_ConnCallbacks,
+                                    m_VideoReceiver.get(),
+                                    m_AudioReceiver.get(),
+                                    nullptr,
+                                    0,
+                                    nullptr,
+                                    0,
+                                })),
       m_QtWindow(nullptr),
       m_UnexpectedTermination(true), // Failure prior to streaming is unexpected
       m_InputHandler(nullptr),
@@ -589,11 +735,14 @@ Session::Session(NvComputer* computer, NvApp& app, StreamingPreferences *prefere
       m_ShouldExit(false),
       m_AsyncConnectionSuccess(false),
       m_PortTestResults(0),
-      m_OpusDecoder(nullptr),
-      m_AudioRenderer(nullptr),
-      m_AudioSampleCount(0),
-      m_DropAudioEndTime(0)
+      m_ActiveVideoFormat(0),
+      m_ActiveVideoWidth(0),
+      m_ActiveVideoHeight(0),
+      m_ActiveVideoFrameRate(0)
 {
+    m_AudioReceiver->setBufferingProfile(
+        audioBufferProfile(
+            m_Preferences->audioLatencyProfile));
 }
 
 Session::~Session()
@@ -604,7 +753,7 @@ Session::~Session()
     SDL_DestroyMutex(m_DecoderLock);
 }
 
-QJsonObject Session::buildHestiaSessionPrepareRequest() const
+HostProtocol::SessionRequest Session::buildHostSessionRequest() const
 {
     int displayWidth = m_StreamConfig.width;
     int displayHeight = m_StreamConfig.height;
@@ -621,15 +770,18 @@ QJsonObject Session::buildHestiaSessionPrepareRequest() const
 
     const HestiaFeatures& features = m_Computer->hestiaCapabilities.features;
     const bool hdrEnabled = m_Preferences->enableHdr && features.hdrModeControl;
-    const QString launchMode = features.gamescopeSession &&
-                                       m_Preferences->hestiaLaunchMode == StreamingPreferences::HLM_GAMESCOPE ?
-                                   "gamescope" : "normal";
-    QString codec = "h264";
+    const HostProtocol::LaunchMode launchMode =
+            features.gamescopeSession &&
+                    m_Preferences->hestiaLaunchMode ==
+                        StreamingPreferences::HLM_GAMESCOPE ?
+                HostProtocol::LaunchMode::Gamescope :
+                HostProtocol::LaunchMode::Normal;
+    HostProtocol::VideoCodec codec = HostProtocol::VideoCodec::H264;
     if (m_StreamConfig.supportedVideoFormats & VIDEO_FORMAT_MASK_AV1) {
-        codec = "av1";
+        codec = HostProtocol::VideoCodec::Av1;
     }
     else if (m_StreamConfig.supportedVideoFormats & VIDEO_FORMAT_MASK_H265) {
-        codec = "hevc";
+        codec = HostProtocol::VideoCodec::Hevc;
     }
 
 #if defined(Q_OS_LINUX)
@@ -642,45 +794,76 @@ QJsonObject Session::buildHestiaSessionPrepareRequest() const
     const QString platform = "unknown";
 #endif
 
-    const QJsonObject client = {
-        {"name", "Hestia"},
-        {"version", VERSION_STR},
-        {"platform", platform},
-        {"display_width", displayWidth},
-        {"display_height", displayHeight},
-        {"refresh_rate", refreshRate},
-        {"hdr", hdrEnabled},
-    };
-    const QJsonObject stream = {
-        {"requested_width", m_StreamConfig.width},
-        {"requested_height", m_StreamConfig.height},
-        {"requested_fps", m_StreamConfig.fps},
-        {"codec", codec},
-        {"bitrate_kbps", m_StreamConfig.bitrate},
-        {"hdr_mode", hdrEnabled ? "hdr" : "sdr"},
-        {"scale_factor", features.scaleFactor ? m_Preferences->hestiaScaleFactor : 100},
-    };
-    const QJsonObject virtualDisplay = {
-        {"enabled", features.virtualDisplay && m_Preferences->hestiaVirtualDisplay},
-        {"backend", "auto"},
-        {"desktop_integration", "auto"},
-        {"recover_physical_monitor", features.displayRecovery},
-    };
-    const QJsonObject app = {
-        {"id", QString::number(m_App.id)},
-        {"launch_mode", launchMode},
-    };
-    QJsonObject request {
-        {"client", client},
-        {"stream", stream},
-        {"virtual_display", virtualDisplay},
-        {"app", app},
-    };
+    HostProtocol::SessionRequest request;
+    request.clientName = QStringLiteral("Hestia");
+    request.clientVersion = QStringLiteral(VERSION_STR);
+    request.clientPlatform = platform;
+    request.displayWidth = displayWidth;
+    request.displayHeight = displayHeight;
+    request.displayRefreshRate = refreshRate;
+    request.displayHdr = hdrEnabled;
+    request.streamWidth = m_StreamConfig.width;
+    request.streamHeight = m_StreamConfig.height;
+    request.streamFrameRate = m_StreamConfig.fps;
+    request.streamBitrateKbps = m_StreamConfig.bitrate;
+    request.streamCodec = codec;
+    request.streamScaleFactor =
+            features.scaleFactor ?
+                m_Preferences->hestiaScaleFactor :
+                100;
+    request.virtualDisplay =
+            features.virtualDisplay &&
+            m_Preferences->hestiaVirtualDisplay;
+    request.recoverPhysicalMonitor = features.displayRecovery;
+    request.applicationId = m_App.id;
+    request.launchMode = launchMode;
     if (features.multiUserSessions) {
-        request.insert("session", QJsonObject {
-            {"isolation", virtualDisplay.value("enabled").toBool() ? "required" : "shared"},
-        });
+        request.isolation =
+                request.virtualDisplay ?
+                    HostProtocol::SessionIsolation::Required :
+                    HostProtocol::SessionIsolation::Shared;
     }
+    return request;
+}
+
+HostProtocol::LaunchRequest Session::buildHostLaunchRequest(
+        bool enableGameOptimizations) const
+{
+    HostProtocol::LaunchRequest request;
+    request.action =
+            m_Computer->currentGameId != 0 ?
+                HostProtocol::LaunchAction::Resume :
+                HostProtocol::LaunchAction::Launch;
+    request.applicationId = m_App.id;
+    request.nvidiaServerSoftware = m_Computer->isNvidiaServerSoftware;
+    request.width = m_StreamConfig.width;
+    request.height = m_StreamConfig.height;
+    request.frameRate = m_StreamConfig.fps;
+    if (m_StreamConfig.supportedVideoFormats & VIDEO_FORMAT_MASK_AV1) {
+        request.codec = HostProtocol::VideoCodec::Av1;
+    }
+    else if (m_StreamConfig.supportedVideoFormats & VIDEO_FORMAT_MASK_H265) {
+        request.codec = HostProtocol::VideoCodec::Hevc;
+    }
+    request.tenBit =
+            m_StreamConfig.supportedVideoFormats & VIDEO_FORMAT_MASK_10BIT;
+    request.audioChannelCount = static_cast<uint8_t>(
+            CHANNEL_COUNT_FROM_AUDIO_CONFIGURATION(
+                m_StreamConfig.audioConfiguration));
+    request.audioChannelMask = static_cast<uint16_t>(
+            CHANNEL_MASK_FROM_AUDIO_CONFIGURATION(
+                m_StreamConfig.audioConfiguration));
+    std::copy(std::cbegin(m_StreamConfig.remoteInputAesKey),
+              std::cend(m_StreamConfig.remoteInputAesKey),
+              request.remoteInputAesKey.begin());
+    std::copy(std::cbegin(m_StreamConfig.remoteInputAesIv),
+              std::cend(m_StreamConfig.remoteInputAesIv),
+              request.remoteInputAesIv.begin());
+    request.enableGameOptimizations = enableGameOptimizations;
+    request.playAudioOnHost = m_Preferences->playAudioOnHost;
+    request.gamepadMask = static_cast<uint32_t>(
+            m_InputHandler->getAttachedGamepadMask());
+    request.persistGameControllers = !m_Preferences->multiController;
     return request;
 }
 
@@ -878,9 +1061,6 @@ bool Session::initialize(QQuickWindow* qtWindow)
     qInfo() << "Server GPU:" << m_Computer->gpuModel;
     qInfo() << "Server GFE version:" << m_Computer->gfeVersion;
 
-    LiInitializeVideoCallbacks(&m_VideoCallbacks);
-    m_VideoCallbacks.setup = drSetup;
-
     m_StreamConfig.fps = m_Preferences->fps;
     m_StreamConfig.bitrate = m_Preferences->bitrateKbps;
     applyHestiaHostLimits();
@@ -920,12 +1100,6 @@ bool Session::initialize(QQuickWindow* qtWindow)
         m_StreamConfig.audioConfiguration = AUDIO_CONFIGURATION_71_SURROUND;
         break;
     }
-
-    LiInitializeAudioCallbacks(&m_AudioCallbacks);
-    m_AudioCallbacks.init = arInit;
-    m_AudioCallbacks.cleanup = arCleanup;
-    m_AudioCallbacks.decodeAndPlaySample = arDecodeAndPlaySample;
-    m_AudioCallbacks.capabilities = getAudioRendererCapabilities(m_StreamConfig.audioConfiguration);
 
     SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
                 "Audio channel count: %d",
@@ -1182,7 +1356,7 @@ bool Session::initialize(QQuickWindow* qtWindow)
     }
 
     if (m_Computer->hestiaCapabilities.supportsProtocolV1) {
-        m_HestiaSessionPrepareRequest = buildHestiaSessionPrepareRequest();
+        m_HostSessionRequest = buildHostSessionRequest();
         m_ShouldPrepareHestiaSession = true;
     }
 
@@ -1412,11 +1586,15 @@ bool Session::validateLaunch(SDL_Window* testWindow)
     }
 
     // Test if audio works at the specified audio configuration
-    bool audioTestPassed = testAudio(m_StreamConfig.audioConfiguration);
+    bool audioTestPassed = m_AudioReceiver->testConfiguration(
+            audioReceiverConfiguration(
+                m_StreamConfig.audioConfiguration));
 
     // Gracefully degrade to stereo if surround sound doesn't work
     if (!audioTestPassed && CHANNEL_COUNT_FROM_AUDIO_CONFIGURATION(m_StreamConfig.audioConfiguration) > 2) {
-        audioTestPassed = testAudio(AUDIO_CONFIGURATION_STEREO);
+        audioTestPassed = m_AudioReceiver->testConfiguration(
+                audioReceiverConfiguration(
+                    AUDIO_CONFIGURATION_STEREO));
         if (audioTestPassed) {
             m_StreamConfig.audioConfiguration = AUDIO_CONFIGURATION_STEREO;
             emitLaunchWarning(tr("Your selected surround sound setting is not supported by the current audio device."));
@@ -1528,12 +1706,12 @@ private:
         // standard GameStream disconnect. Older or standard hosts simply
         // reject this best-effort extension request.
         if (m_Session->m_Computer->hestiaCapabilities.supportsProtocolV1) {
-            NvHTTP http(m_Session->m_Computer);
-            http.stopHestiaSession(m_Session->m_HestiaSessionId);
+            m_Session->m_HostProtocol->stopSession(
+                    m_Session->m_HestiaSessionId);
         }
 
         // Finish cleanup of the connection state
-        LiStopConnection();
+        m_Session->m_ClientTransport->stop();
 
         // Perform a best-effort app quit
         if (shouldQuit) {
@@ -1851,55 +2029,24 @@ bool Session::startConnectionAsync()
         enableGameOptimizations = m_Preferences->gameOptimizations;
     }
 
-    QString rtspSessionUrl;
-
     try {
-        NvHTTP http(m_Computer);
         if (m_ShouldPrepareHestiaSession) {
-            if (!http.prepareHestiaSession(m_HestiaSessionPrepareRequest, &m_HestiaSessionId) &&
+            if (!m_HostProtocol->prepareSession(
+                        m_HostSessionRequest,
+                        &m_HestiaSessionId) &&
                     m_Computer->hestiaCapabilities.features.multiUserSessions) {
                 emit displayLaunchError(tr("The host could not reserve an independent streaming session. Check the Hermes-KMS driver and isolated-session setup."));
                 return false;
             }
         }
-        http.startApp(m_Computer->currentGameId != 0 ? "resume" : "launch",
-                      m_Computer->isNvidiaServerSoftware,
-                      m_App.id, &m_StreamConfig,
-                      enableGameOptimizations,
-                      m_Preferences->playAudioOnHost,
-                      m_InputHandler->getAttachedGamepadMask(),
-                      !m_Preferences->multiController,
-                      rtspSessionUrl);
+        m_RtspSessionUrl = m_HostProtocol->launchSession(
+                buildHostLaunchRequest(enableGameOptimizations));
     } catch (const GfeHttpResponseException& e) {
         emit displayLaunchError(tr("Host returned error: %1").arg(e.toQString()));
         return false;
     } catch (const QtNetworkReplyException& e) {
         emit displayLaunchError(e.toQString());
         return false;
-    }
-
-    QByteArray hostnameStr = m_Computer->activeAddress.address().toUtf8();
-    QByteArray siAppVersion = m_Computer->appVersion.toUtf8();
-
-    SERVER_INFORMATION hostInfo;
-    hostInfo.address = hostnameStr.data();
-    hostInfo.serverInfoAppVersion = siAppVersion.data();
-    hostInfo.serverCodecModeSupport = m_Computer->serverCodecModeSupport;
-
-    // Older GFE versions didn't have this field
-    QByteArray siGfeVersion;
-    if (!m_Computer->gfeVersion.isEmpty()) {
-        siGfeVersion = m_Computer->gfeVersion.toUtf8();
-    }
-    if (!siGfeVersion.isEmpty()) {
-        hostInfo.serverInfoGfeVersion = siGfeVersion.data();
-    }
-
-    // Older GFE and Sunshine versions didn't have this field
-    QByteArray rtspSessionUrlStr;
-    if (!rtspSessionUrl.isEmpty()) {
-        rtspSessionUrlStr = rtspSessionUrl.toUtf8();
-        hostInfo.rtspSessionUrl = rtspSessionUrlStr.data();
     }
 
     if (m_Preferences->packetSize != 0) {
@@ -1915,21 +2062,23 @@ bool Session::startConnectionAsync()
         // Use 1392 byte video packets by default
         m_StreamConfig.packetSize = 1392;
 
-        // getActiveAddressReachability() does network I/O, so we only attempt to check
-        // reachability if we've already contacted the PC successfully.
-        switch (m_Computer->getActiveAddressReachability()) {
-        case NvComputer::RI_LAN:
+        // Path selection may do network I/O, so only ask the connectivity
+        // agent after we've already contacted the PC successfully.
+        const Connectivity::SelectedPath selectedPath =
+                m_ConnectivityAgent->selectPath();
+        switch (selectedPath.type) {
+        case Connectivity::PathType::DirectLan:
             // This address is on-link, so treat it as a local address
             // even if it's not in RFC 1918 space or it's an IPv6 address.
             m_StreamConfig.streamingRemotely = STREAM_CFG_LOCAL;
             break;
-        case NvComputer::RI_VPN:
+        case Connectivity::PathType::Vpn:
             // It looks like our route to this PC is over a VPN, so cap at 1024 bytes.
             // Treat it as remote even if the target address is in RFC 1918 address space.
             m_StreamConfig.streamingRemotely = STREAM_CFG_REMOTE;
             m_StreamConfig.packetSize = 1024;
             break;
-        default:
+        case Connectivity::PathType::Unknown:
             // If we don't have reachability info, let moonlight-common-c decide.
             m_StreamConfig.streamingRemotely = STREAM_CFG_AUTO;
             break;
@@ -1954,10 +2103,9 @@ bool Session::startConnectionAsync()
                                                                          false);
     }
 
-    int err = LiStartConnection(&hostInfo, &m_StreamConfig, &k_ConnCallbacks,
-                                &m_VideoCallbacks, &m_AudioCallbacks,
-                                NULL, 0, NULL, 0);
-    if (err != 0) {
+    const ClientTransport::StartResult transportStart =
+            m_ClientTransport->start();
+    if (!transportStart) {
         // We already displayed an error dialog in the stage failure
         // listener.
         return false;
@@ -2007,7 +2155,11 @@ void Session::start()
 
     // Initialize the gamepad code with our preferences
     // NB: m_InputHandler must be initialize before starting the connection.
-    m_InputHandler = new SdlInputHandler(*m_Preferences, m_StreamConfig.width, m_StreamConfig.height);
+    m_InputHandler = new SdlInputHandler(
+            *m_Preferences,
+            m_StreamConfig.width,
+            m_StreamConfig.height,
+            *m_InputSender);
 
     // Kick off the async connection thread then return to the caller to pump the event loop
     auto thread = new AsyncConnectionStartThread(this);
@@ -2019,7 +2171,7 @@ void Session::start()
 void Session::interrupt()
 {
     // Stop any connection in progress
-    LiInterruptConnection();
+    m_ClientTransport->interrupt();
 
     // Inject a quit event to our SDL event loop
     SDL_Event event;
@@ -2301,13 +2453,13 @@ void Session::exec()
             switch (event.window.event) {
             case SDL_WINDOWEVENT_FOCUS_LOST:
                 if (m_Preferences->muteOnFocusLoss) {
-                    m_AudioMuted = true;
+                    m_AudioReceiver->setMuted(true);
                 }
                 m_InputHandler->notifyFocusLost();
                 break;
             case SDL_WINDOWEVENT_FOCUS_GAINED:
                 if (m_Preferences->muteOnFocusLoss) {
-                    m_AudioMuted = false;
+                    m_AudioReceiver->setMuted(false);
                 }
                 m_InputHandler->notifyFocusGained();
                 break;
@@ -2368,21 +2520,19 @@ void Session::exec()
             if (m_VideoDecoder) {
                 bool forceRecreation = false;
 
-                WINDOW_STATE_CHANGE_INFO windowChangeInfo = {};
-                windowChangeInfo.window = m_Window;
+                Decoder::WindowStateChange windowChange;
+                windowChange.nativeWindow = m_Window;
 
                 if (event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED) {
-                    windowChangeInfo.stateChangeFlags |= WINDOW_STATE_CHANGE_SIZE;
-
-                    windowChangeInfo.width = event.window.data1;
-                    windowChangeInfo.height = event.window.data2;
+                    windowChange.sizeChanged = true;
+                    windowChange.width = event.window.data1;
+                    windowChange.height = event.window.data2;
                 }
 
                 int newDisplayIndex = SDL_GetWindowDisplayIndex(m_Window);
                 if (newDisplayIndex != currentDisplayIndex) {
-                    windowChangeInfo.stateChangeFlags |= WINDOW_STATE_CHANGE_DISPLAY;
-
-                    windowChangeInfo.displayIndex = newDisplayIndex;
+                    windowChange.displayChanged = true;
+                    windowChange.displayIndex = newDisplayIndex;
 
                     // If the refresh rates have changed, we will need to go through the full
                     // decoder recreation path to ensure Pacer is switched to the new display
@@ -2398,7 +2548,9 @@ void Session::exec()
                     }
                 }
 
-                if (!forceRecreation && m_VideoDecoder->notifyWindowChanged(&windowChangeInfo)) {
+                if (!forceRecreation &&
+                        m_VideoDecoder->notifyWindowChanged(
+                            windowChange)) {
                     // Update the window display mode based on our current monitor
                     // NB: Avoid a useless modeset by only doing this if it changed.
                     if (newDisplayIndex != currentDisplayIndex) {
@@ -2470,7 +2622,8 @@ void Session::exec()
                                    enableVsync,
                                    enableVsync && m_Preferences->framePacing,
                                    false,
-                                   s_ActiveSession->m_VideoDecoder)) {
+                                   s_ActiveSession->m_VideoDecoder,
+                                   m_SessionTelemetry.get())) {
                     SDL_UnlockMutex(m_DecoderLock);
                     SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
                                  "Failed to recreate decoder after reset");

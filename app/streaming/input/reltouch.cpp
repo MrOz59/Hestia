@@ -1,6 +1,5 @@
 #include "input.h"
 
-#include <Limelight.h>
 #include "SDL_compat.h"
 
 #include <QtMath>
@@ -14,15 +13,25 @@
 // How far the finger can move before it cancels a drag or tap
 #define DEAD_ZONE_DELTA 0.01f
 
-Uint32 SdlInputHandler::releaseLeftButtonTimerCallback(Uint32, void*)
+Uint32 SdlInputHandler::releaseLeftButtonTimerCallback(
+        Uint32,
+        void* param)
 {
-    LiSendMouseButtonEvent(BUTTON_ACTION_RELEASE, BUTTON_LEFT);
+    auto handler = static_cast<SdlInputHandler*>(param);
+    handler->sendMouseButton(
+            InputSender::MouseButton::Left,
+            InputSender::ButtonAction::Release);
     return 0;
 }
 
-Uint32 SdlInputHandler::releaseRightButtonTimerCallback(Uint32, void*)
+Uint32 SdlInputHandler::releaseRightButtonTimerCallback(
+        Uint32,
+        void* param)
 {
-    LiSendMouseButtonEvent(BUTTON_ACTION_RELEASE, BUTTON_RIGHT);
+    auto handler = static_cast<SdlInputHandler*>(param);
+    handler->sendMouseButton(
+            InputSender::MouseButton::Right,
+            InputSender::ButtonAction::Release);
     return 0;
 }
 
@@ -33,13 +42,16 @@ Uint32 SdlInputHandler::dragTimerCallback(Uint32, void *param)
     // Check how many fingers are down now to decide
     // which button to hold down
     if (me->m_NumFingersDown == 2) {
-        me->m_DragButton = BUTTON_RIGHT;
+        me->m_DragButton = InputSender::MouseButton::Right;
     }
     else if (me->m_NumFingersDown == 1) {
-        me->m_DragButton = BUTTON_LEFT;
+        me->m_DragButton = InputSender::MouseButton::Left;
     }
 
-    LiSendMouseButtonEvent(BUTTON_ACTION_PRESS, me->m_DragButton);
+    me->sendMouseButton(
+            me->m_DragButton,
+            InputSender::ButtonAction::Press);
+    me->m_DragButtonDown = true;
 
     return 0;
 }
@@ -100,7 +112,7 @@ void SdlInputHandler::handleRelativeFingerEvent(SDL_TouchFingerEvent* event)
         short deltaX = static_cast<short>(event->dx * m_StreamWidth);
         short deltaY = static_cast<short>(event->dy * m_StreamHeight);
         if (deltaX != 0 || deltaY != 0) {
-            LiSendMouseMoveEvent(deltaX, deltaY);
+            sendRelativePointer(deltaX, deltaY);
         }
     }
 
@@ -132,9 +144,11 @@ void SdlInputHandler::handleRelativeFingerEvent(SDL_TouchFingerEvent* event)
         m_DragTimer = 0;
 
         // Release any drag
-        if (m_DragButton != 0) {
-            LiSendMouseButtonEvent(BUTTON_ACTION_RELEASE, m_DragButton);
-            m_DragButton = 0;
+        if (m_DragButtonDown) {
+            sendMouseButton(
+                    m_DragButton,
+                    InputSender::ButtonAction::Release);
+            m_DragButtonDown = false;
         }
         // 2 finger tap
         else if (event->timestamp - m_TouchDownEvent[1].timestamp < 250) {
@@ -143,24 +157,28 @@ void SdlInputHandler::handleRelativeFingerEvent(SDL_TouchFingerEvent* event)
             m_TouchDownEvent[0].timestamp = 0;
 
             // Press down the right mouse button
-            LiSendMouseButtonEvent(BUTTON_ACTION_PRESS, BUTTON_RIGHT);
+            sendMouseButton(
+                    InputSender::MouseButton::Right,
+                    InputSender::ButtonAction::Press);
 
             // Queue a timer to release it in 100 ms
             SDL_RemoveTimer(m_RightButtonReleaseTimer);
             m_RightButtonReleaseTimer = SDL_AddTimer(TAP_BUTTON_RELEASE_DELAY,
                                                      releaseRightButtonTimerCallback,
-                                                     nullptr);
+                                                     this);
         }
         // 1 finger tap
         else if (event->timestamp - m_TouchDownEvent[0].timestamp < 250) {
             // Press down the left mouse button
-            LiSendMouseButtonEvent(BUTTON_ACTION_PRESS, BUTTON_LEFT);
+            sendMouseButton(
+                    InputSender::MouseButton::Left,
+                    InputSender::ButtonAction::Press);
 
             // Queue a timer to release it in 100 ms
             SDL_RemoveTimer(m_LeftButtonReleaseTimer);
             m_LeftButtonReleaseTimer = SDL_AddTimer(TAP_BUTTON_RELEASE_DELAY,
                                                     releaseLeftButtonTimerCallback,
-                                                    nullptr);
+                                                    this);
         }
     }
 

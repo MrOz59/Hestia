@@ -1,4 +1,3 @@
-#include <Limelight.h>
 #include "SDL_compat.h"
 #include "streaming/session.h"
 #include "settings/mappingmanager.h"
@@ -9,8 +8,16 @@
 #include <QDir>
 #include <QGuiApplication>
 
-SdlInputHandler::SdlInputHandler(StreamingPreferences& prefs, int streamWidth, int streamHeight)
-    : m_MultiController(prefs.multiController),
+#include <chrono>
+
+SdlInputHandler::SdlInputHandler(
+        StreamingPreferences& prefs,
+        int streamWidth,
+        int streamHeight,
+        InputSender::IInputSender& inputSender)
+    : m_InputSender(inputSender),
+      m_NextInputSequence(1),
+      m_MultiController(prefs.multiController),
       m_GamepadMouse(prefs.gamepadMouse),
       m_SwapMouseButtons(prefs.swapMouseButtons),
       m_ReverseScrollDirection(prefs.reverseScrollDirection),
@@ -32,7 +39,8 @@ SdlInputHandler::SdlInputHandler(StreamingPreferences& prefs, int streamWidth, i
       m_LeftButtonReleaseTimer(0),
       m_RightButtonReleaseTimer(0),
       m_DragTimer(0),
-      m_DragButton(0),
+      m_DragButton(InputSender::MouseButton::Left),
+      m_DragButtonDown(false),
       m_NumFingersDown(0)
 {
     // System keys are always captured when running without a DE
@@ -211,6 +219,9 @@ SdlInputHandler::SdlInputHandler(StreamingPreferences& prefs, int streamWidth, i
     m_GamepadMask = getAttachedGamepadMask();
 
     SDL_zero(m_GamepadState);
+    for (GamepadState& state : m_GamepadState) {
+        state.inputHandler = this;
+    }
     SDL_zero(m_LastTouchDownEvent);
     SDL_zero(m_LastTouchUpEvent);
     SDL_zero(m_TouchDownEvent);
@@ -281,10 +292,84 @@ void SdlInputHandler::raiseAllKeys()
                 (int)m_KeysDown.count());
 
     for (auto keyDown : std::as_const(m_KeysDown)) {
-        LiSendKeyboardEvent(keyDown, KEY_ACTION_UP, 0);
+        m_InputSender.sendKeyboard({
+            nextEventMetadata(0),
+            static_cast<uint16_t>(keyDown),
+            InputSender::KeyAction::Up,
+            InputSender::KeyboardModifierNone,
+            false,
+        });
     }
 
     m_KeysDown.clear();
+}
+
+InputSender::EventMetadata SdlInputHandler::nextEventMetadata(
+        uint32_t deviceId,
+        bool replaceable) noexcept
+{
+    using Clock = std::chrono::steady_clock;
+    const uint64_t timestampUs = static_cast<uint64_t>(
+            std::chrono::duration_cast<std::chrono::microseconds>(
+                    Clock::now().time_since_epoch()).count());
+    return {
+        m_NextInputSequence.fetch_add(1, std::memory_order_relaxed),
+        timestampUs,
+        deviceId,
+        replaceable,
+    };
+}
+
+void SdlInputHandler::sendMouseButton(
+        InputSender::MouseButton button,
+        InputSender::ButtonAction action)
+{
+    m_InputSender.sendMouseButton({
+        nextEventMetadata(0),
+        button,
+        action,
+    });
+}
+
+void SdlInputHandler::sendRelativePointer(
+        int32_t deltaX,
+        int32_t deltaY,
+        uint32_t deviceId)
+{
+    m_InputSender.sendRelativePointer({
+        nextEventMetadata(deviceId, true),
+        deltaX,
+        deltaY,
+    });
+}
+
+void SdlInputHandler::sendAbsolutePointer(
+        int32_t x,
+        int32_t y,
+        int32_t referenceWidth,
+        int32_t referenceHeight)
+{
+    m_InputSender.sendAbsolutePointer({
+        nextEventMetadata(0, true),
+        x,
+        y,
+        referenceWidth,
+        referenceHeight,
+    });
+}
+
+void SdlInputHandler::sendScroll(
+        InputSender::ScrollAxis axis,
+        InputSender::ScrollUnit unit,
+        int16_t delta,
+        uint32_t deviceId)
+{
+    m_InputSender.sendScroll({
+        nextEventMetadata(deviceId),
+        axis,
+        unit,
+        delta,
+    });
 }
 
 void SdlInputHandler::notifyMouseLeave()

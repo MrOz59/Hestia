@@ -2,6 +2,7 @@
 #include "ffmpeg.h"
 #include "utils.h"
 #include "streaming/session.h"
+#include "streaming/video/scheduler/legacypaceradapter.h"
 
 #include <h264_stream.h>
 
@@ -58,6 +59,16 @@ extern "C" {
 #define MAX_SPS_EXTRA_SIZE 16
 
 #define FAILED_DECODES_RESET_THRESHOLD 20
+
+namespace {
+
+void releaseAvFrame(void* nativeHandle) noexcept
+{
+    auto* frame = static_cast<AVFrame*>(nativeHandle);
+    av_frame_free(&frame);
+}
+
+} // namespace
 
 bool FFmpegVideoDecoder::isHardwareAccelerated()
 {
@@ -217,7 +228,9 @@ enum AVPixelFormat FFmpegVideoDecoder::ffGetFormat(AVCodecContext* context,
     return AV_PIX_FMT_NONE;
 }
 
-FFmpegVideoDecoder::FFmpegVideoDecoder(bool testOnly)
+FFmpegVideoDecoder::FFmpegVideoDecoder(
+        bool testOnly,
+        SessionTelemetry::ISessionTelemetry* telemetry)
     : m_Pkt(av_packet_alloc()),
       m_VideoDecoderCtx(nullptr),
       m_RequiredPixelFormat(AV_PIX_FMT_NONE),
@@ -226,7 +239,11 @@ FFmpegVideoDecoder::FFmpegVideoDecoder(bool testOnly)
       m_BackendRenderer(nullptr),
       m_FrontendRenderer(nullptr),
       m_ConsecutiveFailedDecodes(0),
-      m_Pacer(nullptr),
+      m_Telemetry(
+          telemetry != nullptr ?
+              telemetry :
+              &SessionTelemetry::nullSessionTelemetry()),
+      m_RenderScheduler(),
       m_BwTracker(10, 250),
       m_FramesIn(0),
       m_FramesOut(0),
@@ -276,10 +293,24 @@ void FFmpegVideoDecoder::reset()
     }
 
     m_FramesIn = m_FramesOut = 0;
+    if (m_Telemetry->frameTracingEnabled()) {
+        while (!m_FrameInfoQueue.isEmpty()) {
+            const auto du = m_FrameInfoQueue.dequeue();
+            const auto trace = m_FrameTimeline.recordTerminal(
+                    du.frameNumber,
+                    0,
+                    LiGetMicroseconds(),
+                    PipelineTelemetry::FrameOutcome::Dropped,
+                    PipelineTelemetry::FrameTerminalReason::Shutdown);
+            if (trace) {
+                m_Telemetry->publishFrameTrace(*trace);
+            }
+        }
+    }
     m_FrameInfoQueue.clear();
 
-    delete m_Pacer;
-    m_Pacer = nullptr;
+    m_RenderScheduler.reset();
+    m_FrameTimeline.reset();
 
     // This must be called after deleting Pacer because it
     // may be holding AVFrames to free in its destructor.
@@ -302,7 +333,10 @@ void FFmpegVideoDecoder::reset()
     m_FrontendRenderer = m_BackendRenderer = nullptr;
 
     if (m_CurrentTestMode != TestMode::TestFrameOnly) {
-        logVideoStats(m_GlobalVideoStats, "Global video stats");
+        m_Telemetry->publishVideoSessionSummary({
+            m_GlobalVideoStats,
+            videoStreamContext(),
+        });
     }
     else {
         // Test-only decoders can't have any frames submitted
@@ -496,9 +530,24 @@ bool FFmpegVideoDecoder::completeInitialization(const AVCodec* decoder, enum AVP
 
     // Don't bother initializing Pacer if we're not actually going to render
     if (testMode != TestMode::TestFrameOnly) {
-        m_Pacer = new Pacer(m_FrontendRenderer, &m_ActiveWndVideoStats);
-        if (!m_Pacer->initialize(params->window, params->frameRate,
-                                 params->enableFramePacing || (params->enableVsync && (m_FrontendRenderer->getRendererAttributes() & RENDERER_ATTRIBUTE_FORCE_PACING)))) {
+        m_RenderScheduler =
+                std::make_unique<
+                    RenderScheduler::LegacyPacerAdapter>(
+                    m_FrontendRenderer,
+                    &m_ActiveWndVideoStats,
+                    &m_FrameTimeline,
+                    m_Telemetry);
+        RenderScheduler::Configuration schedulerConfiguration;
+        schedulerConfiguration.nativeWindow = params->window;
+        schedulerConfiguration.maximumFrameRate =
+                static_cast<uint32_t>(params->frameRate);
+        schedulerConfiguration.framePacing =
+                params->enableFramePacing ||
+                (params->enableVsync &&
+                 (m_FrontendRenderer->getRendererAttributes() &
+                  RENDERER_ATTRIBUTE_FORCE_PACING));
+        if (!m_RenderScheduler->initialize(
+                    schedulerConfiguration)) {
             return false;
         }
     }
@@ -543,8 +592,13 @@ bool FFmpegVideoDecoder::completeInitialization(const AVCodec* decoder, enum AVP
     m_VideoDecoderCtx->pkt_timebase.num = 1;
     m_VideoDecoderCtx->pkt_timebase.den = 90000;
 
-    // Allocate enough extra frames for Pacer to avoid stalling the decoder
-    m_VideoDecoderCtx->extra_hw_frames = PACER_MAX_OUTSTANDING_FRAMES;
+    // Allocate enough extra frames for the scheduler to avoid stalling decode.
+    m_VideoDecoderCtx->extra_hw_frames =
+            m_RenderScheduler != nullptr ?
+                static_cast<int>(
+                    m_RenderScheduler->capabilities()
+                        .maximumOutstandingFrames) :
+                0;
 
     // For non-hwaccel decoders, set the pix_fmt to hint to the decoder which
     // format should be used. This is necessary for certain decoders like the
@@ -766,7 +820,15 @@ void FFmpegVideoDecoder::addVideoStats(VIDEO_STATS& src, VIDEO_STATS& dst)
     dst.totalDecodeTimeUs += src.totalDecodeTimeUs;
     dst.totalPacerTimeUs += src.totalPacerTimeUs;
     dst.totalRenderTimeUs += src.totalRenderTimeUs;
+    PipelineTelemetry::mergeLatency(src.reassemblyLatency, dst.reassemblyLatency);
+    PipelineTelemetry::mergeLatency(src.decodeLatency, dst.decodeLatency);
+    PipelineTelemetry::mergeLatency(src.pacerLatency, dst.pacerLatency);
+    PipelineTelemetry::mergeLatency(src.renderLatency, dst.renderLatency);
+    PipelineTelemetry::mergeQueueDepth(
+            src.rtpFecQueueDepth,
+            dst.rtpFecQueueDepth);
     for (int i = 0; i < 4; i++) {
+        dst.decoderQueueDepth[i] += src.decoderQueueDepth[i];
         dst.pacingQueueDepth[i] += src.pacingQueueDepth[i];
         dst.renderQueueDepth[i] += src.renderQueueDepth[i];
     }
@@ -812,247 +874,78 @@ void FFmpegVideoDecoder::addVideoStats(VIDEO_STATS& src, VIDEO_STATS& dst)
     dst.renderedFps     = (double)dst.renderedFrames / timeDiffSecs;
 }
 
-void FFmpegVideoDecoder::stringifyVideoStats(VIDEO_STATS& stats, char* output, int length)
+SessionTelemetry::VideoStreamContext
+FFmpegVideoDecoder::videoStreamContext()
 {
-    int offset = 0;
-    const char* codecString;
-    int ret;
+    SessionTelemetry::VideoStreamContext stream;
+    stream.width = m_VideoDecoderCtx != nullptr ?
+        m_VideoDecoderCtx->width :
+        m_OriginalVideoWidth;
+    stream.height = m_VideoDecoderCtx != nullptr ?
+        m_VideoDecoderCtx->height :
+        m_OriginalVideoHeight;
+    stream.targetFrameRate = m_StreamFps;
+    stream.hdr = LiGetCurrentHostDisplayHdrMode();
 
-    // Start with an empty string
-    output[offset] = 0;
-
-    switch (m_VideoFormat)
-    {
+    switch (m_VideoFormat) {
     case VIDEO_FORMAT_H264:
-        codecString = "H.264";
+        stream.codec = SessionTelemetry::VideoCodec::H264;
         break;
-
     case VIDEO_FORMAT_H264_HIGH8_444:
-        codecString = "H.264 4:4:4";
+        stream.codec = SessionTelemetry::VideoCodec::H264;
+        stream.chroma444 = true;
         break;
-
     case VIDEO_FORMAT_H265:
-        codecString = "HEVC";
+        stream.codec = SessionTelemetry::VideoCodec::Hevc;
         break;
-
     case VIDEO_FORMAT_H265_REXT8_444:
-        codecString = "HEVC 4:4:4";
+        stream.codec = SessionTelemetry::VideoCodec::Hevc;
+        stream.chroma444 = true;
         break;
-
     case VIDEO_FORMAT_H265_MAIN10:
-        if (LiGetCurrentHostDisplayHdrMode()) {
-            codecString = "HEVC 10-bit HDR";
-        }
-        else {
-            codecString = "HEVC 10-bit SDR";
-        }
+        stream.codec = SessionTelemetry::VideoCodec::Hevc;
+        stream.tenBit = true;
         break;
-
     case VIDEO_FORMAT_H265_REXT10_444:
-        if (LiGetCurrentHostDisplayHdrMode()) {
-            codecString = "HEVC 10-bit HDR 4:4:4";
-        }
-        else {
-            codecString = "HEVC 10-bit SDR 4:4:4";
-        }
+        stream.codec = SessionTelemetry::VideoCodec::Hevc;
+        stream.tenBit = true;
+        stream.chroma444 = true;
         break;
-
     case VIDEO_FORMAT_AV1_MAIN8:
-        codecString = "AV1";
+        stream.codec = SessionTelemetry::VideoCodec::Av1;
         break;
-
     case VIDEO_FORMAT_AV1_HIGH8_444:
-        codecString = "AV1 4:4:4";
+        stream.codec = SessionTelemetry::VideoCodec::Av1;
+        stream.chroma444 = true;
         break;
-
     case VIDEO_FORMAT_AV1_MAIN10:
-        if (LiGetCurrentHostDisplayHdrMode()) {
-            codecString = "AV1 10-bit HDR";
-        }
-        else {
-            codecString = "AV1 10-bit SDR";
-        }
+        stream.codec = SessionTelemetry::VideoCodec::Av1;
+        stream.tenBit = true;
         break;
-
     case VIDEO_FORMAT_AV1_HIGH10_444:
-        if (LiGetCurrentHostDisplayHdrMode()) {
-            codecString = "AV1 10-bit HDR 4:4:4";
-        }
-        else {
-            codecString = "AV1 10-bit SDR 4:4:4";
-        }
+        stream.codec = SessionTelemetry::VideoCodec::Av1;
+        stream.tenBit = true;
+        stream.chroma444 = true;
         break;
-
     default:
-        SDL_assert(false);
-        codecString = "UNKNOWN";
         break;
     }
 
-    if (stats.receivedFps > 0) {
-        if (m_VideoDecoderCtx != nullptr) {
-#ifdef DISPLAY_BITRATE
-            double avgVideoMbps = m_BwTracker.GetAverageMbps();
-            double peakVideoMbps = m_BwTracker.GetPeakMbps();
-#endif
-
-            ret = snprintf(&output[offset],
-                           length - offset,
-                           "Video stream: %dx%d %.2f FPS (Codec: %s)\n"
-#ifdef DISPLAY_BITRATE
-                           "Bitrate: %.1f Mbps, Peak (%us): %.1f\n"
-#endif
-                           ,
-                           m_VideoDecoderCtx->width,
-                           m_VideoDecoderCtx->height,
-                           stats.totalFps,
-                           codecString
-#ifdef DISPLAY_BITRATE
-                           ,
-                           avgVideoMbps,
-                           m_BwTracker.GetWindowSeconds(),
-                           peakVideoMbps
-#endif
-                           );
-            if (ret < 0 || ret >= length - offset) {
-                SDL_assert(false);
-                return;
-            }
-
-            offset += ret;
-        }
-
-        ret = snprintf(&output[offset],
-                       length - offset,
-                       "Incoming frame rate from network: %.2f FPS\n"
-                       "Decoding frame rate: %.2f FPS\n"
-                       "Rendering frame rate: %.2f FPS\n",
-                       stats.receivedFps,
-                       stats.decodedFps,
-                       stats.renderedFps);
-        if (ret < 0 || ret >= length - offset) {
-            SDL_assert(false);
-            return;
-        }
-
-        offset += ret;
+    if (m_RenderScheduler != nullptr) {
+        const RenderScheduler::PresentationStatus status =
+                m_RenderScheduler->status();
+        stream.presentationPath = status.pathName;
+        stream.displayRefreshRateMillihertz =
+                status.displayRefreshRateMillihertz;
     }
 
-    if (stats.framesWithHostProcessingLatency > 0) {
-        ret = snprintf(&output[offset],
-                       length - offset,
-                       "Host processing latency min/max/average: %.1f/%.1f/%.1f ms\n",
-                       (float)stats.minHostProcessingLatency / 10,
-                       (float)stats.maxHostProcessingLatency / 10,
-                       (float)stats.totalHostProcessingLatency / 10 / stats.framesWithHostProcessingLatency);
-        if (ret < 0 || ret >= length - offset) {
-            SDL_assert(false);
-            return;
-        }
-
-        offset += ret;
-    }
-
-    if (stats.renderedFrames != 0) {
-        char rttString[32];
-
-        if (stats.lastRtt != 0) {
-            snprintf(rttString, sizeof(rttString), "%u ms (variance: %u ms)", stats.lastRtt, stats.lastRttVariance);
-        }
-        else {
-            snprintf(rttString, sizeof(rttString), "N/A");
-        }
-
-        ret = snprintf(&output[offset],
-                       length - offset,
-                       "Frames dropped by your network connection: %.2f%%\n"
-                       "Frames dropped by the frame pacer: %.2f%%\n"
-                       "Average network latency: %s\n"
-                       "Average decoding time: %.2f ms\n"
-                       "Average frame queue delay: %.2f ms\n"
-                       "Average rendering time (including monitor V-sync latency): %.2f ms\n",
-                       (float)stats.networkDroppedFrames / stats.totalFrames * 100,
-                       (float)stats.pacerDroppedFrames / stats.decodedFrames * 100,
-                       rttString,
-                       (double)(stats.totalDecodeTimeUs / 1000.0) / stats.decodedFrames,
-                       (double)(stats.totalPacerTimeUs / 1000.0) / stats.renderedFrames,
-                       (double)(stats.totalRenderTimeUs / 1000.0) / stats.renderedFrames);
-        if (ret < 0 || ret >= length - offset) {
-            SDL_assert(false);
-            return;
-        }
-
-        offset += ret;
-
-        if (m_Pacer != nullptr) {
-            ret = snprintf(&output[offset],
-                           length - offset,
-                           "Presentation path: %s at %.3f Hz\n"
-                           "Pacing queue depth 0/1/2/3+: %u/%u/%u/%u (target: %u)\n"
-                           "Render queue depth 0/1/2/3+: %u/%u/%u/%u (target: %u)\n",
-                           m_Pacer->getPresentationPathName(),
-                           m_Pacer->getDisplayFpsMillihertz() / 1000.0,
-                           stats.pacingQueueDepth[0],
-                           stats.pacingQueueDepth[1],
-                           stats.pacingQueueDepth[2],
-                           stats.pacingQueueDepth[3],
-                           stats.pacingQueueTarget,
-                           stats.renderQueueDepth[0],
-                           stats.renderQueueDepth[1],
-                           stats.renderQueueDepth[2],
-                           stats.renderQueueDepth[3],
-                           stats.renderQueueTarget);
-            if (ret < 0 || ret >= length - offset) {
-                SDL_assert(false);
-                return;
-            }
-            offset += ret;
-        }
-
-        if (stats.vsyncIntervals != 0) {
-            ret = snprintf(&output[offset],
-                           length - offset,
-                           "V-Sync interval average/max: %.2f/%.2f ms (%u late)\n",
-                           (double)(stats.totalVsyncIntervalUs / 1000.0) /
-                                   stats.vsyncIntervals,
-                           stats.maxVsyncIntervalUs / 1000.0,
-                           stats.lateVsyncIntervals);
-            if (ret < 0 || ret >= length - offset) {
-                SDL_assert(false);
-                return;
-            }
-            offset += ret;
-        }
-    }
-}
-
-void FFmpegVideoDecoder::appendDiagnosisText(const Diagnostics::Diagnosis& diagnosis,
-                                             const Diagnostics::SpikeHistory& history,
-                                             char* output, int length)
-{
-    // Append onto the end of whatever stringifyVideoStats already wrote.
-    int offset = (int)SDL_strlen(output);
-    if (offset >= length) {
-        return;
-    }
-
-    const QByteArray diagnosisText =
-            (QLatin1Char('\n') + Diagnostics::formatOverlayText(diagnosis, history)).toUtf8();
-    if (!diagnosisText.isEmpty()) {
-        snprintf(&output[offset], length - offset, "%s", diagnosisText.constData());
-    }
-}
-
-void FFmpegVideoDecoder::logVideoStats(VIDEO_STATS& stats, const char* title)
-{
-    if (stats.renderedFps > 0 || stats.renderedFrames != 0) {
-        char videoStatsStr[1024];
-        stringifyVideoStats(stats, videoStatsStr, sizeof(videoStatsStr));
-
-        SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
-                    "\n%s\n------------------\n%s",
-                    title, videoStatsStr);
-    }
+    stream.averageMegabitsPerSecond =
+            m_BwTracker.GetAverageMbps();
+    stream.peakMegabitsPerSecond =
+            m_BwTracker.GetPeakMbps();
+    stream.peakBitrateWindowSeconds =
+            m_BwTracker.GetWindowSeconds();
+    return stream;
 }
 
 IFFmpegRenderer* FFmpegVideoDecoder::createHwAccelRenderer(const AVCodecHWConfig* hwDecodeCfg, PDECODER_PARAMETERS params, int pass)
@@ -2021,6 +1914,9 @@ void FFmpegVideoDecoder::decoderThreadProc()
 
                     // Capture a frame timestamp to measuring pacing delay
                     frame->pkt_dts = LiGetMicroseconds();
+                    RenderScheduler::FrameTiming frameTiming;
+                    frameTiming.readyTimeUs =
+                            static_cast<uint64_t>(frame->pkt_dts);
 
                     if (!m_FrameInfoQueue.isEmpty()) {
                         // Data buffers in the DU are not valid here!
@@ -2029,16 +1925,37 @@ void FFmpegVideoDecoder::decoderThreadProc()
                         // Count time in avcodec_send_packet() and avcodec_receive_frame()
                         // as time spent decoding. Also count time spent in the decode unit
                         // queue because that's directly caused by decoder latency.
-                        m_ActiveWndVideoStats.totalDecodeTimeUs += (LiGetMicroseconds() - du.enqueueTimeUs);
+                        const auto decodeCompletedUs = LiGetMicroseconds();
+                        const auto decodeTimeUs = decodeCompletedUs - du.enqueueTimeUs;
+                        m_ActiveWndVideoStats.totalDecodeTimeUs += decodeTimeUs;
+                        PipelineTelemetry::recordLatency(
+                            m_ActiveWndVideoStats.decodeLatency,
+                            PipelineTelemetry::Microseconds {decodeTimeUs});
 
                         // Store the presentation time (90 kHz timebase)
                         frame->pts = (int64_t)du.rtpTimestamp;
+                        frameTiming.frameNumber = du.frameNumber;
+                        frameTiming.sourcePresentationTimeUs =
+                                du.presentationTimeUs;
+                        frameTiming.rtpTimestamp = du.rtpTimestamp;
+                        if (m_Telemetry->frameTracingEnabled()) {
+                            frame->opaque =
+                                    PipelineTelemetry::frameIdTag(du.frameNumber);
+                            m_FrameTimeline.recordDecoded(
+                                    du.frameNumber,
+                                    decodeCompletedUs);
+                        }
                     }
 
                     m_ActiveWndVideoStats.decodedFrames++;
 
                     // Queue the frame for rendering (or render now if pacer is disabled)
-                    m_Pacer->submitFrame(frame);
+                    m_RenderScheduler->submitFrame(
+                        RenderScheduler::DecodedFrame {
+                            frame,
+                            releaseAvFrame,
+                            frameTiming,
+                        });
                 }
                 else if (err == AVERROR(EAGAIN)) {
                     VIDEO_FRAME_HANDLE handle;
@@ -2099,18 +2016,38 @@ int FFmpegVideoDecoder::submitDecodeUnit(PDECODE_UNIT du)
 
     SDL_assert(m_CurrentTestMode != TestMode::TestFrameOnly);
 
+    if (m_Telemetry->frameTracingEnabled()) {
+        m_FrameTimeline.recordReceived(
+                du->frameNumber,
+                du->receiveTimeUs,
+                du->enqueueTimeUs);
+    }
+
     if (!LiGetEstimatedRttInfo(&m_ActiveWndVideoStats.lastRtt,
                                &m_ActiveWndVideoStats.lastRttVariance)) {
         m_ActiveWndVideoStats.lastRtt = 0;
         m_ActiveWndVideoStats.lastRttVariance = 0;
     }
-    if (m_Pacer != nullptr) {
-        m_Pacer->updateNetworkJitter(m_ActiveWndVideoStats.lastRtt,
-                                     m_ActiveWndVideoStats.lastRttVariance);
+    if (m_RenderScheduler != nullptr) {
+        m_RenderScheduler->updateNetworkConditions({
+            m_ActiveWndVideoStats.lastRtt,
+            m_ActiveWndVideoStats.lastRttVariance,
+        });
     }
 
     // If this is the first frame, reject anything that's not an IDR frame
     if (m_FramesIn == 0 && du->frameType != FRAME_TYPE_IDR) {
+        if (m_Telemetry->frameTracingEnabled()) {
+            const auto trace = m_FrameTimeline.recordTerminal(
+                    du->frameNumber,
+                    0,
+                    LiGetMicroseconds(),
+                    PipelineTelemetry::FrameOutcome::Dropped,
+                    PipelineTelemetry::FrameTerminalReason::AwaitingIdr);
+            if (trace) {
+                m_Telemetry->publishFrameTrace(*trace);
+            }
+        }
         return DR_NEED_IDR;
     }
 
@@ -2129,28 +2066,14 @@ int FFmpegVideoDecoder::submitDecodeUnit(PDECODE_UNIT du)
 
     // Flip stats windows roughly every second
     if (LiGetMicroseconds() > m_ActiveWndVideoStats.measurementStartUs + 1000000) {
-        // Diagnose the just-completed one-second window and remember it so
-        // intermittent spikes stay visible after the fact (client roadmap
-        // Phase 0). The per-second window is the most sensitive to brief hitches.
-        m_SpikeHistory.record(Diagnostics::diagnose(m_ActiveWndVideoStats, m_StreamFps));
-
-        // Update overlay stats if it's enabled
-        if (Session::get()->getOverlayManager().isOverlayEnabled(Overlay::OverlayDebug)) {
-            VIDEO_STATS lastTwoWndStats = {};
-            addVideoStats(m_LastWndVideoStats, lastTwoWndStats);
-            addVideoStats(m_ActiveWndVideoStats, lastTwoWndStats);
-
-            char* overlayText = Session::get()->getOverlayManager().getOverlayText(Overlay::OverlayDebug);
-            int overlayLen = Session::get()->getOverlayManager().getOverlayMaxTextLength();
-            stringifyVideoStats(lastTwoWndStats, overlayText, overlayLen);
-
-            // Append the plain-language verdict for the displayed window plus a
-            // running spike summary (roadmap items 0.2 and 0.3).
-            appendDiagnosisText(Diagnostics::diagnose(lastTwoWndStats, m_StreamFps),
-                                m_SpikeHistory, overlayText, overlayLen);
-
-            Session::get()->getOverlayManager().setOverlayTextUpdated(Overlay::OverlayDebug);
-        }
+        VIDEO_STATS lastTwoWndStats = {};
+        addVideoStats(m_LastWndVideoStats, lastTwoWndStats);
+        addVideoStats(m_ActiveWndVideoStats, lastTwoWndStats);
+        m_Telemetry->publishVideoWindow({
+            m_ActiveWndVideoStats,
+            lastTwoWndStats,
+            videoStreamContext(),
+        });
 
         // Accumulate these values into the global stats
         addVideoStats(m_ActiveWndVideoStats, m_GlobalVideoStats);
@@ -2175,6 +2098,9 @@ int FFmpegVideoDecoder::submitDecodeUnit(PDECODE_UNIT du)
 
     m_ActiveWndVideoStats.receivedFrames++;
     m_ActiveWndVideoStats.totalFrames++;
+    PipelineTelemetry::recordQueueDepth(
+            m_ActiveWndVideoStats.rtpFecQueueDepth,
+            du->rtpQueuePeakDepth);
 
     int requiredBufferSize = du->fullLength;
     if (du->frameType == FRAME_TYPE_IDR) {
@@ -2201,7 +2127,11 @@ int FFmpegVideoDecoder::submitDecodeUnit(PDECODE_UNIT du)
         m_Pkt->flags = 0;
     }
 
-    m_ActiveWndVideoStats.totalReassemblyTimeUs += (du->enqueueTimeUs - du->receiveTimeUs);
+    const auto reassemblyTimeUs = du->enqueueTimeUs - du->receiveTimeUs;
+    m_ActiveWndVideoStats.totalReassemblyTimeUs += reassemblyTimeUs;
+    PipelineTelemetry::recordLatency(
+        m_ActiveWndVideoStats.reassemblyLatency,
+        PipelineTelemetry::Microseconds {reassemblyTimeUs});
 
     err = avcodec_send_packet(m_VideoDecoderCtx, m_Pkt);
     if (err < 0) {
@@ -2211,6 +2141,17 @@ int FFmpegVideoDecoder::submitDecodeUnit(PDECODE_UNIT du)
                     "avcodec_send_packet() failed: %s (frame %d)",
                     errorstring,
                     du->frameNumber);
+        if (m_Telemetry->frameTracingEnabled()) {
+            const auto trace = m_FrameTimeline.recordTerminal(
+                    du->frameNumber,
+                    0,
+                    LiGetMicroseconds(),
+                    PipelineTelemetry::FrameOutcome::Dropped,
+                    PipelineTelemetry::FrameTerminalReason::DecodeSubmitFailed);
+            if (trace) {
+                m_Telemetry->publishFrameTrace(*trace);
+            }
+        }
 
         // If we've failed a bunch of decodes in a row, the decoder/renderer is
         // clearly unhealthy, so let's generate a synthetic reset event to trigger
@@ -2231,6 +2172,8 @@ int FFmpegVideoDecoder::submitDecodeUnit(PDECODE_UNIT du)
     }
 
     m_FrameInfoQueue.enqueue(*du);
+    m_ActiveWndVideoStats.decoderQueueDepth[
+            qBound(0, m_FrameInfoQueue.size(), 3)]++;
 
     m_FramesIn++;
     return DR_OK;
@@ -2238,5 +2181,5 @@ int FFmpegVideoDecoder::submitDecodeUnit(PDECODE_UNIT du)
 
 void FFmpegVideoDecoder::renderFrameOnMainThread()
 {
-    m_Pacer->renderOnMainThread();
+    m_RenderScheduler->renderOnMainThread();
 }

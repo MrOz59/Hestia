@@ -84,6 +84,10 @@ QJsonObject toHestiaPreparePayload(const SessionRequest& request)
         {"app", app},
     };
 
+    if (!request.extensions.isEmpty()) {
+        payload.insert("extensions", HermesExtensions::toJson(request.extensions));
+    }
+
     const QString isolation = isolationName(request.isolation);
     if (!isolation.isEmpty()) {
         payload.insert("session", QJsonObject {

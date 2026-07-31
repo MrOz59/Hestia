@@ -243,6 +243,33 @@ bool HestiaCapabilities::fromJson(const QJsonObject& response, HestiaCapabilitie
         return false;
     }
 
+    // Extensions are optional on purpose. A Hermes build from before they
+    // existed advertises none, and must keep working exactly as it did; an
+    // entry this client cannot make sense of is skipped rather than failing the
+    // whole capabilities response over a field it does not need.
+    const QJsonValue extensions = response.value("extensions");
+    if (extensions.isArray()) {
+        for (const QJsonValue& entry : extensions.toArray()) {
+            if (!entry.isObject()) {
+                continue;
+            }
+
+            const QJsonObject object = entry.toObject();
+            const QString name = object.value("name").toString();
+            const QJsonValue version = object.value("version");
+            if (name.isEmpty() || name.size() > 64 || !version.isDouble()) {
+                continue;
+            }
+
+            const int parsedVersion = version.toInt();
+            if (parsedVersion <= 0) {
+                continue;
+            }
+
+            parsed.extensions.append({name, static_cast<uint32_t>(parsedVersion)});
+        }
+    }
+
     *capabilities = parsed;
     return true;
 }

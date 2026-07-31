@@ -4,7 +4,11 @@
 #include <cstdint>
 
 #include <QJsonObject>
+#include <QMap>
 #include <QString>
+#include <QVector>
+
+#include "hermesextensions.h"
 
 namespace HostProtocol {
 
@@ -55,6 +59,9 @@ struct SessionRequest {
     int applicationId = 0;
     LaunchMode launchMode = LaunchMode::Normal;
     SessionIsolation isolation = SessionIsolation::Unspecified;
+    // Hermes extensions to announce for this session. Empty is the ordinary
+    // case: against a host that advertises none, nothing is announced.
+    QVector<HermesExtensions::Extension> extensions;
 };
 
 struct LaunchRequest {
@@ -84,8 +91,12 @@ public:
     virtual ~IHostProtocol() = default;
 
     virtual Mode mode() const noexcept = 0;
+    // negotiatedExtensions receives the set the host reports as in force, which
+    // may be smaller than what was announced. It may be null when the caller
+    // does not care.
     virtual bool prepareSession(const SessionRequest& request,
-                                QString* sessionId) = 0;
+                                QString* sessionId,
+                                QMap<QString, uint32_t>* negotiatedExtensions = nullptr) = 0;
     virtual QString launchSession(const LaunchRequest& request) = 0;
     virtual bool stopSession(const QString& sessionId) = 0;
 };

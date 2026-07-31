@@ -12,7 +12,8 @@ public:
 
     Mode mode() const noexcept override;
     bool prepareSession(const SessionRequest& request,
-                        QString* sessionId) override;
+                        QString* sessionId,
+                        QMap<QString, uint32_t>* negotiatedExtensions = nullptr) override;
     QString launchSession(const LaunchRequest& request) override;
     bool stopSession(const QString& sessionId) override;
 

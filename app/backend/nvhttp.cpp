@@ -1,4 +1,5 @@
 #include "nvcomputer.h"
+#include "streaming/protocol/hermesextensions.h"
 #include <Limelight.h>
 
 #include <QDebug>
@@ -342,7 +343,9 @@ bool NvHTTP::probeHestiaDiagnostics(HestiaPreflight* preflight)
     return true;
 }
 
-bool NvHTTP::prepareHestiaSession(const QJsonObject& sessionRequest, QString* sessionId)
+bool NvHTTP::prepareHestiaSession(const QJsonObject& sessionRequest,
+                                  QString* sessionId,
+                                  QMap<QString, uint32_t>* negotiatedExtensions)
 {
     if (m_ServerCert.isNull()) {
         qDebug() << "[Hestia] Skipping session prepare; host is not paired";
@@ -437,7 +440,23 @@ bool NvHTTP::prepareHestiaSession(const QJsonObject& sessionRequest, QString* se
     if (sessionId != nullptr) {
         *sessionId = preparedSessionId;
     }
+
+    // The host is the authority on what is in force: it drops names it does
+    // not know and versions it does not implement, so the announcement cannot
+    // be assumed to have been taken whole. A host that predates extensions
+    // sends nothing here, which is an empty set and a normal session.
+    const QMap<QString, uint32_t> negotiated =
+            HermesExtensions::parseNegotiated(response);
+    if (negotiatedExtensions != nullptr) {
+        *negotiatedExtensions = negotiated;
+    }
+
     qDebug() << "[Hestia] Session prepared:" << preparedSessionId;
+    if (!negotiated.isEmpty()) {
+        for (auto it = negotiated.constBegin(); it != negotiated.constEnd(); ++it) {
+            qDebug() << "[Hestia] Extension in force:" << it.key() << "v" << it.value();
+        }
+    }
     return true;
 }
 

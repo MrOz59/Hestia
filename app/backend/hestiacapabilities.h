@@ -4,6 +4,8 @@
 #include <QStringList>
 #include <QVector>
 
+#include "streaming/protocol/hermesextensions.h"
+
 class QJsonObject;
 
 struct HestiaCompatibility
@@ -53,6 +55,10 @@ struct HestiaCapabilities
     HestiaCompatibility compatibility;
     HestiaFeatures features;
     HestiaLimits limits;
+    // Extensions advertised by the host, in the protocol's own type so the
+    // announcement path and this model cannot drift apart. Hosts from before
+    // extensions existed advertise none.
+    QVector<HermesExtensions::Extension> extensions;
 
     static bool fromJson(const QJsonObject& response, HestiaCapabilities* capabilities, QString* error);
 };

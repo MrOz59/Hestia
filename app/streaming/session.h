@@ -283,6 +283,10 @@ private:
     QStringList m_LaunchWarnings;
     HostProtocol::SessionRequest m_HostSessionRequest;
     QString m_HestiaSessionId;
+    // Hermes extensions the host reported as in force for this session. Empty
+    // against any host that advertises none, which includes every GameStream
+    // host and every Hermes build from before extensions existed.
+    QMap<QString, uint32_t> m_NegotiatedExtensions;
     bool m_ShouldPrepareHestiaSession;
     Uint32 m_LastHestiaClipboardSyncCheckMs;
     QString m_LastHestiaClipboardText;

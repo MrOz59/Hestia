@@ -823,6 +823,11 @@ HostProtocol::SessionRequest Session::buildHostSessionRequest() const
                     HostProtocol::SessionIsolation::Required :
                     HostProtocol::SessionIsolation::Shared;
     }
+    // Announce only what both ends know about. A host that advertises no
+    // extensions gets no announcement at all, which is the same request Hestia
+    // sent before extensions existed.
+    request.extensions = HermesExtensions::announcementFor(
+            m_Computer->hestiaCapabilities.extensions);
     return request;
 }
 
@@ -2033,7 +2038,8 @@ bool Session::startConnectionAsync()
         if (m_ShouldPrepareHestiaSession) {
             if (!m_HostProtocol->prepareSession(
                         m_HostSessionRequest,
-                        &m_HestiaSessionId) &&
+                        &m_HestiaSessionId,
+                        &m_NegotiatedExtensions) &&
                     m_Computer->hestiaCapabilities.features.multiUserSessions) {
                 emit displayLaunchError(tr("The host could not reserve an independent streaming session. Check the Hermes-KMS driver and isolated-session setup."));
                 return false;

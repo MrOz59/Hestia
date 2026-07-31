@@ -34,7 +34,18 @@ The current media wire remains GameStream. C0/C1 telemetry and modularization
 are complete, and C2 improvements are landing behind the existing adapters.
 Optional feedback/recovery extensions, ICE/connectivity, and native
 identity/pairing are planned before the H7/C7 **HDT — Hermes Datagram
-Transport** prototype. HDT therefore remains several prerequisite phases away,
+Transport** prototype.
+
+Extension negotiation with Hermes (H4) is in place on this side: the client
+reads the `extensions` array from `/api/hestia/v1/capabilities`, announces the
+intersection with what it implements in `session/prepare`, and stores the set
+the host reports as in force. Everything about it degrades quietly — a host
+that advertises no extensions receives no announcement and gets exactly the
+request Hestia sent before any of this existed, and the client never assumes
+its announcement was accepted whole. `packet_feedback` is deliberately **not**
+announced yet: reporting per-packet arrivals needs the receive path to record
+them first, and announcing a capability this client cannot serve would have the
+host enable a path that silently does nothing. HDT therefore remains several prerequisite phases away,
 has no delivery date, and must begin opt-in and disabled by default. Sunshine,
 Apollo, Hermes, and generic GameStream host compatibility remains a release
 requirement throughout the transition.

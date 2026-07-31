@@ -15,6 +15,7 @@ SOURCES += \
     ../app/backend/hestiacapabilities.cpp \
     ../app/settings/presetconfiguration.cpp \
     ../app/streaming/hestianegotiation.cpp \
+    ../app/streaming/protocol/hermesextensions.cpp \
     ../app/streaming/protocol/hostprotocol.cpp \
     ../app/streaming/audio/bufferpolicy.cpp \
     ../app/streaming/audio/audiotelemetry.cpp \

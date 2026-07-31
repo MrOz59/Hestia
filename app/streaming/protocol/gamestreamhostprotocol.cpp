@@ -37,12 +37,14 @@ Mode GameStreamHostProtocol::mode() const noexcept
 }
 
 bool GameStreamHostProtocol::prepareSession(const SessionRequest& request,
-                                            QString* sessionId)
+                                            QString* sessionId,
+                                            QMap<QString, uint32_t>* negotiatedExtensions)
 {
     NvHTTP http(m_Computer);
     return http.prepareHestiaSession(
             toHestiaPreparePayload(request),
-            sessionId);
+            sessionId,
+            negotiatedExtensions);
 }
 
 QString GameStreamHostProtocol::launchSession(const LaunchRequest& request)

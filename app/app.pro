@@ -198,6 +198,7 @@ SOURCES += \
     streaming/hestianegotiation.cpp \
     streaming/connectivity/gamestreamconnectivityagent.cpp \
     streaming/protocol/gamestreamhostprotocol.cpp \
+    streaming/protocol/hermesextensions.cpp \
     streaming/protocol/hostprotocol.cpp \
     streaming/transport/gamestreamclienttransport.cpp \
     streaming/telemetry/legacysessiontelemetry.cpp \
@@ -253,6 +254,7 @@ HEADERS += \
     streaming/connectivity/connectivityagent.h \
     streaming/connectivity/gamestreamconnectivityagent.h \
     streaming/protocol/gamestreamhostprotocol.h \
+    streaming/protocol/hermesextensions.h \
     streaming/protocol/hostprotocol.h \
     streaming/transport/clienttransport.h \
     streaming/transport/gamestreamclienttransport.h \

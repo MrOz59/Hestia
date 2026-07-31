@@ -8,6 +8,7 @@
 #include "streaming/connectivity/connectivityagent.h"
 #include "streaming/hestianegotiation.h"
 #include "streaming/input/sender/inputsender.h"
+#include "streaming/protocol/hermesextensions.h"
 #include "streaming/protocol/hostprotocol.h"
 #include "streaming/telemetry/sessiontelemetry.h"
 #include "streaming/transport/clienttransport.h"
@@ -96,12 +97,16 @@ public:
     }
 
     bool prepareSession(const HostProtocol::SessionRequest& request,
-                        QString* sessionId) override
+                        QString* sessionId,
+                        QMap<QString, uint32_t>* negotiatedExtensions = nullptr) override
     {
         prepareCalled = true;
         preparedRequest = request;
         if (sessionId != nullptr) {
             *sessionId = QStringLiteral("fake-session");
+        }
+        if (negotiatedExtensions != nullptr) {
+            *negotiatedExtensions = negotiatedResult;
         }
         return true;
     }
@@ -122,6 +127,7 @@ public:
     }
 
     bool prepareCalled = false;
+    QMap<QString, uint32_t> negotiatedResult;
     bool launchCalled = false;
     bool stopCalled = false;
     HostProtocol::SessionRequest preparedRequest;
@@ -1895,6 +1901,140 @@ private slots:
                 requested, limits, false, false);
         QCOMPARE(result.effective.bitrateKbps, 50000);
         QVERIFY(!result.bitrateAdjusted);
+    }
+
+    // A Hermes build from before extensions existed sends no such field, and
+    // must keep working exactly as it did.
+    void capabilitiesWithoutExtensionsStayValid()
+    {
+        QJsonObject response = validCapabilities();
+        QVERIFY(!response.contains(QStringLiteral("extensions")));
+
+        HestiaCapabilities capabilities;
+        QString error;
+        QVERIFY2(HestiaCapabilities::fromJson(response, &capabilities, &error),
+                 qPrintable(error));
+        QVERIFY(capabilities.extensions.isEmpty());
+        QVERIFY(HermesExtensions::announcementFor(capabilities.extensions).isEmpty());
+    }
+
+    void capabilitiesParseAdvertisedExtensions()
+    {
+        QJsonObject response = validCapabilities();
+        response.insert(QStringLiteral("extensions"), QJsonArray {
+            QJsonObject {
+                {"name", "congestion_report"},
+                {"version", 1},
+                {"experimental", true},
+            },
+            // Malformed entries are skipped, never a reason to reject a
+            // capabilities response over a field the client can do without.
+            QJsonObject {{"name", "broken"}},
+            QJsonValue(7),
+            QJsonObject {{"name", ""}, {"version", 1}},
+            QJsonObject {{"name", "future_extension"}, {"version", 4}},
+        });
+
+        HestiaCapabilities capabilities;
+        QString error;
+        QVERIFY2(HestiaCapabilities::fromJson(response, &capabilities, &error),
+                 qPrintable(error));
+        QCOMPARE(capabilities.extensions.size(), 2);
+        QCOMPARE(capabilities.extensions.at(0).name,
+                 QStringLiteral("congestion_report"));
+        QCOMPARE(capabilities.extensions.at(0).version, 1u);
+        QCOMPARE(capabilities.extensions.at(1).name,
+                 QStringLiteral("future_extension"));
+    }
+
+    // Announce only what both ends know: a name the host does not advertise
+    // would be dropped anyway, and one this client cannot serve would have the
+    // host enable a path that does nothing.
+    void extensionAnnouncementIsTheIntersection()
+    {
+        const QVector<HermesExtensions::Extension> advertised {
+            {QStringLiteral("congestion_report"), 1},
+            {QStringLiteral("packet_feedback"), 1},
+            {QStringLiteral("something_else"), 2},
+        };
+
+        const auto announcement = HermesExtensions::announcementFor(advertised);
+
+        for (const auto& extension : announcement) {
+            QVERIFY(HermesExtensions::supported().contains(extension));
+            QVERIFY(advertised.contains(extension));
+        }
+        QVERIFY(!announcement.contains({QStringLiteral("something_else"), 2}));
+    }
+
+    // A host advertising the same name at a version this client does not
+    // implement is not a match.
+    void extensionAnnouncementRequiresAMatchingVersion()
+    {
+        const QVector<HermesExtensions::Extension> advertised {
+            {QStringLiteral("congestion_report"), 99},
+        };
+
+        QVERIFY(HermesExtensions::announcementFor(advertised).isEmpty());
+    }
+
+    void extensionAnnouncementSerializesToJson()
+    {
+        const QVector<HermesExtensions::Extension> extensions {
+            {QStringLiteral("congestion_report"), 1},
+        };
+
+        const QJsonArray json = HermesExtensions::toJson(extensions);
+
+        QCOMPARE(json.size(), 1);
+        QCOMPARE(json.at(0).toObject().value("name").toString(),
+                 QStringLiteral("congestion_report"));
+        QCOMPARE(json.at(0).toObject().value("version").toInt(), 1);
+    }
+
+    void preparePayloadCarriesTheAnnouncement()
+    {
+        HostProtocol::SessionRequest request;
+        request.applicationId = 5;
+        QVERIFY(!HostProtocol::toHestiaPreparePayload(request)
+                         .contains("extensions"));
+
+        request.extensions = {{QStringLiteral("congestion_report"), 1}};
+        const QJsonArray announced =
+                HostProtocol::toHestiaPreparePayload(request)
+                        .value("extensions").toArray();
+        QCOMPARE(announced.size(), 1);
+        QCOMPARE(announced.at(0).toObject().value("name").toString(),
+                 QStringLiteral("congestion_report"));
+    }
+
+    // The host decides what is in force; the client must read it back rather
+    // than assume its announcement was taken whole.
+    void negotiatedExtensionsComeFromTheHostResponse()
+    {
+        QJsonObject response;
+        response.insert(QStringLiteral("extensions"), QJsonArray {
+            QJsonObject {{"name", "congestion_report"}, {"version", 1}},
+            QJsonObject {{"name", "dropped"}, {"version", 0}},
+            QJsonValue(QStringLiteral("nonsense")),
+        });
+
+        const auto negotiated = HermesExtensions::parseNegotiated(response);
+
+        QCOMPARE(negotiated.size(), 1);
+        QVERIFY(HermesExtensions::isActive(
+                negotiated, QStringLiteral("congestion_report"), 1));
+        QVERIFY(!HermesExtensions::isActive(
+                negotiated, QStringLiteral("congestion_report"), 2));
+        QVERIFY(!HermesExtensions::isActive(
+                negotiated, QStringLiteral("packet_feedback"), 1));
+    }
+
+    void negotiatedExtensionsAreEmptyWithoutTheField()
+    {
+        QVERIFY(HermesExtensions::parseNegotiated(QJsonObject {}).isEmpty());
+        QVERIFY(HermesExtensions::parseNegotiated(
+                        QJsonObject {{"extensions", 12}}).isEmpty());
     }
 };
 

@@ -17,11 +17,9 @@ bool isValidName(const QString& name)
 
 QVector<Extension> supported()
 {
-    // packet_feedback is not listed yet: the client can negotiate nothing it
-    // cannot serve, and reporting per-packet arrivals needs the receive path to
-    // record them first. It moves here with that work, not before it.
     return {
         {Name::CongestionReport, 1},
+        {Name::PacketFeedback, 1},
     };
 }
 

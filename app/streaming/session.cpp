@@ -2044,6 +2044,15 @@ bool Session::startConnectionAsync()
                 emit displayLaunchError(tr("The host could not reserve an independent streaming session. Check the Hermes-KMS driver and isolated-session setup."));
                 return false;
             }
+
+            // Only the host's answer turns an extension on. Announcing it is a
+            // request, not an agreement, and a report the host did not agree to
+            // is one it is required to drop.
+            m_ClientTransport->setPacketFeedbackEnabled(
+                    HermesExtensions::isActive(
+                            m_NegotiatedExtensions,
+                            HermesExtensions::Name::PacketFeedback,
+                            1));
         }
         m_RtspSessionUrl = m_HostProtocol->launchSession(
                 buildHostLaunchRequest(enableGameOptimizations));

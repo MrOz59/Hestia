@@ -70,6 +70,10 @@ StartResult GameStreamClientTransport::start()
         hostInfo.rtspSessionUrl = rtspSessionUrl.data();
     }
 
+    // Set before the connection starts so the first packets are already being
+    // reported; the library keeps it off until told otherwise.
+    LiSetPacketFeedbackEnabled(m_Context.packetFeedback);
+
     const int errorCode = LiStartConnection(
             &hostInfo,
             m_Context.streamConfiguration,
@@ -90,6 +94,11 @@ StartResult GameStreamClientTransport::start()
         errorCode == 0,
         errorCode,
     };
+}
+
+void GameStreamClientTransport::setPacketFeedbackEnabled(bool enabled) noexcept
+{
+    m_Context.packetFeedback = enabled;
 }
 
 void GameStreamClientTransport::interrupt() noexcept

@@ -37,6 +37,10 @@ struct GameStreamContext {
     int rendererFlags = 0;
     void* audioContext = nullptr;
     int audioFlags = 0;
+    // Hermes packet_feedback extension, enabled only when the host negotiated
+    // it. Off against every other host, which is every host that would not
+    // understand the message.
+    bool packetFeedback = false;
 };
 
 class GameStreamClientTransport final : public IClientTransport {
@@ -46,6 +50,7 @@ public:
     Mode mode() const noexcept override;
     StartResult start() override;
     void interrupt() noexcept override;
+    void setPacketFeedbackEnabled(bool enabled) noexcept override;
     void stop() noexcept override;
 
 private:

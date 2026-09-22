@@ -65,6 +65,11 @@ unix:if(!macx|disable-prebuilts) {
     CONFIG += link_pkgconfig
     PKGCONFIG += openssl sdl2 SDL2_ttf
 
+    packagesExist(pyrowave-shared) {
+        PKGCONFIG += pyrowave-shared
+        CONFIG += pyrowave
+    }
+
     # We have our own optimized libopus.a for Steam Link
     if(!config_SL|disable-prebuilts) {
         PKGCONFIG += opus
@@ -248,6 +253,14 @@ HEADERS += \
     streaming/video/overlaymanager.h \
     streaming/video/statsdiagnostics.h \
     backend/systemproperties.h
+
+pyrowave {
+    message(PyroWave decoder selected)
+
+    DEFINES += HAVE_PYROWAVE
+    SOURCES += streaming/video/pyrowavedecoder.cpp
+    HEADERS += streaming/video/pyrowavedecoder.h
+}
 
 # Platform-specific renderers and decoders
 ffmpeg {

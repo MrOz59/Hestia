@@ -19,19 +19,21 @@ on:
 
 jobs:
   build:
-    name: Build (${{ matrix.os }})
+    name: Build (${{ matrix.arch }} / ${{ matrix.os }})
     env:
       CI_VERSION: ${{ inputs.ci_version }}
     strategy:
       fail-fast: false
       matrix:
-        # Ubuntu 24.04 only. 22.04 ships a libplacebo-dev built against an older
-        # FFmpeg ABI than its own libavcodec, so libplacebo's libav headers fail
-        # to compile there — a distro packaging mismatch, not a Hestia issue
-        # (upstream sidesteps it by building libplacebo/FFmpeg from source). The
-        # focus is modern Linux, so we don't carry that broken combination.
-        os:
-          - ubuntu-24.04
+        include:
+          - os: ubuntu-24.04
+            arch: x86_64
+            uname_arch: x86_64
+
+          - os: ubuntu-24.04-arm
+            arch: aarch64
+            uname_arch: aarch64
+
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -40,6 +42,17 @@ jobs:
         with:
           submodules: 'recursive'
           fetch-depth: 1
+
+      - name: Verify runner architecture
+        run: |
+          RUNNER_ARCH="$(uname -m)"
+          echo "Runner architecture: ${RUNNER_ARCH}"
+          echo "Expected architecture: ${{ matrix.uname_arch }}"
+
+          if [ "${RUNNER_ARCH}" != "${{ matrix.uname_arch }}" ]; then
+            echo "::error::Unexpected runner architecture: ${RUNNER_ARCH}"
+            exit 1
+          fi
 
       - name: Install build dependencies
         run: |
@@ -69,21 +82,43 @@ jobs:
 
       - name: Verify binary was produced
         run: |
-          test -x app/moonlight || { echo "::error::app/moonlight was not built"; exit 1; }
+          test -x app/moonlight || {
+            echo "::error::app/moonlight was not built"
+            exit 1
+          }
+
           file app/moonlight
+
+          case "${{ matrix.arch }}" in
+            x86_64)
+              file app/moonlight | grep -Eq 'x86-64|x86_64' || {
+                echo "::error::Binary is not x86_64"
+                exit 1
+              }
+              ;;
+            aarch64)
+              file app/moonlight | grep -Eq 'ARM aarch64|aarch64' || {
+                echo "::error::Binary is not AArch64"
+                exit 1
+              }
+              ;;
+          esac
 
       - name: Stage a versioned tarball
         run: |
           VERSION="$(cat app/version.txt)"
-          STAGE="hestia-${VERSION}-linux-x86_64"
+          STAGE="hestia-${VERSION}-linux-${{ matrix.arch }}"
+
           mkdir -p "dist/${STAGE}"
           cp app/moonlight "dist/${STAGE}/moonlight"
+
           tar -C dist -czf "dist/${STAGE}.tar.gz" "${STAGE}"
+
           ls -l dist
 
       - name: Upload binary
         uses: actions/upload-artifact@v6
         with:
-          name: Hestia-Linux-${{ matrix.os }}-${{ env.CI_VERSION }}
+          name: Hestia-Linux-${{ matrix.arch }}-${{ matrix.os }}-${{ env.CI_VERSION }}
           path: dist/*.tar.gz
           if-no-files-found: error

@@ -16,12 +16,20 @@ on:
       ci_version:
         required: true
         type: string
+      # The version the client reports (see build.yml); empty for the plain
+      # app/version.txt number.
+      build_version:
+        required: false
+        type: string
+        default: ''
 
 jobs:
   build:
     name: Build (${{ matrix.os }})
     env:
       CI_VERSION: ${{ inputs.ci_version }}
+      # Read by app/app.pro.
+      HESTIA_BUILD_VERSION: ${{ inputs.build_version }}
     strategy:
       fail-fast: false
       matrix:
@@ -82,7 +90,7 @@ jobs:
 
       - name: Stage a versioned tarball
         run: |
-          VERSION="$(cat app/version.txt)"
+          VERSION="${HESTIA_BUILD_VERSION:-$(cat app/version.txt)}"
           STAGE="hestia-${VERSION}-linux-x86_64"
           mkdir -p "dist/${STAGE}"
           cp app/moonlight "dist/${STAGE}/moonlight"

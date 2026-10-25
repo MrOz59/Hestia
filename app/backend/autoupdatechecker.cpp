@@ -4,6 +4,11 @@
 #include <QJsonDocument>
 #include <QJsonArray>
 #include <QJsonObject>
+#include <QSysInfo>
+
+// Hestia's own releases. Moonlight's update manifest describes Moonlight's
+// version numbers, against which every Hestia build looks out of date.
+#define HESTIA_RELEASES_API "https://api.github.com/repos/MrOz59/Hestia/releases/"
 
 AutoUpdateChecker::AutoUpdateChecker(QObject *parent) :
     QObject(parent)
@@ -19,12 +24,11 @@ AutoUpdateChecker::AutoUpdateChecker(QObject *parent) :
     connect(m_Nam, &QNetworkAccessManager::finished,
             this, &AutoUpdateChecker::handleUpdateCheckRequestFinished);
 
-    QString currentVersion(VERSION_STR);
-    qDebug() << "Current Moonlight version:" << currentVersion;
-    parseStringToVersionQuad(currentVersion, m_CurrentVersionQuad);
+    qDebug() << "Current Hestia version:" << VERSION_STR;
+    m_CurrentVersion = HestiaUpdate::parse(VERSION_STR);
 
     // Should at least have a 1.0-style version number
-    Q_ASSERT(m_CurrentVersionQuad.count() > 1);
+    Q_ASSERT(m_CurrentVersion && m_CurrentVersion->release.size() > 1);
 }
 
 void AutoUpdateChecker::start()
@@ -35,6 +39,11 @@ void AutoUpdateChecker::start()
     }
 
 #if defined(Q_OS_WIN32) || defined(Q_OS_DARWIN) || defined(STEAM_LINK) || defined(APP_IMAGE) // Only run update checker on platforms without auto-update
+    if (!m_CurrentVersion) {
+        qWarning() << "Not checking for updates: unrecognized version" << VERSION_STR;
+        return;
+    }
+
 #if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0) && QT_VERSION < QT_VERSION_CHECK(5, 15, 1) && !defined(QT_NO_BEARERMANAGEMENT)
     // HACK: Set network accessibility to work around QTBUG-80947 (introduced in Qt 5.14.0 and fixed in Qt 5.15.1)
     QT_WARNING_PUSH
@@ -43,176 +52,125 @@ void AutoUpdateChecker::start()
     QT_WARNING_POP
 #endif
 
-    // We'll get a callback when this is finished
-    QUrl url("https://moonlight-stream.org/updates/qt.json");
+    // A release build follows tagged releases. A nightly follows the rolling
+    // "nightly" release, which "latest" never returns since it is a prerelease.
+    QUrl url(m_CurrentVersion->isNightly() ? HESTIA_RELEASES_API "tags/nightly"
+                                           : HESTIA_RELEASES_API "latest");
     QNetworkRequest request(url);
+    request.setRawHeader("Accept", "application/vnd.github+json");
+    request.setRawHeader("X-GitHub-Api-Version", "2022-11-28");
+    // The GitHub API turns away requests without a User-Agent.
+    request.setRawHeader("User-Agent", "Hestia/" VERSION_STR);
 #if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
     request.setAttribute(QNetworkRequest::Http2AllowedAttribute, true);
 #else
     request.setAttribute(QNetworkRequest::HTTP2AllowedAttribute, true);
 #endif
+
+    // We'll get a callback when this is finished
     m_Nam->get(request);
 #endif
 }
 
-void AutoUpdateChecker::parseStringToVersionQuad(QString& string, QVector<int>& version)
+// Only point at a release that has something to replace this build with.
+// Hestia publishes Linux packages, so a Windows or macOS build (best-effort)
+// is not sent to a release page that has nothing for it, and neither is an
+// AppImage when that nightly's AppImage build failed.
+bool AutoUpdateChecker::releaseHasAssetForThisBuild(const QJsonArray& assets)
 {
-    QStringList list = string.split('.');
-    for (const QString& component : std::as_const(list)) {
-        version.append(component.toInt());
-    }
-}
-
-QString AutoUpdateChecker::getPlatform()
-{
-#if defined(STEAM_LINK)
-    return QStringLiteral("steamlink");
-#elif defined(APP_IMAGE)
-    return QStringLiteral("appimage");
-#elif defined(Q_OS_DARWIN) && QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-    // Qt 6 changed this from 'osx' to 'macos'. Use the old one
-    // to be consistent (and not require another entry in the manifest).
-    return QStringLiteral("osx");
+    for (const auto& asset : assets) {
+        const QString name = asset.toObject().value(QStringLiteral("name")).toString();
+#if defined(APP_IMAGE)
+        if (name.endsWith(QStringLiteral(".AppImage"), Qt::CaseInsensitive) &&
+                name.contains(QSysInfo::buildCpuArchitecture())) {
+            return true;
+        }
+#elif defined(STEAM_LINK)
+        if (name.contains(QStringLiteral("SteamLink"), Qt::CaseInsensitive)) {
+            return true;
+        }
+#elif defined(Q_OS_WIN32)
+        if (name.endsWith(QStringLiteral(".exe"), Qt::CaseInsensitive) ||
+                name.endsWith(QStringLiteral(".msi"), Qt::CaseInsensitive) ||
+                (name.contains(QStringLiteral("Portable"), Qt::CaseInsensitive) &&
+                 name.endsWith(QStringLiteral(".zip"), Qt::CaseInsensitive))) {
+            return true;
+        }
+#elif defined(Q_OS_DARWIN)
+        if (name.endsWith(QStringLiteral(".dmg"), Qt::CaseInsensitive)) {
+            return true;
+        }
 #else
-    return QSysInfo::productType();
+        Q_UNUSED(name);
 #endif
-}
-
-int AutoUpdateChecker::compareVersion(QVector<int>& version1, QVector<int>& version2) {
-    for (int i = 0;; i++) {
-        int v1Val = 0;
-        int v2Val = 0;
-
-        // Treat missing decimal places as 0
-        if (i < version1.count()) {
-            v1Val = version1[i];
-        }
-        if (i < version2.count()) {
-            v2Val = version2[i];
-        }
-        if (i >= version1.count() && i >= version2.count()) {
-            // Equal versions
-            return 0;
-        }
-
-        if (v1Val < v2Val) {
-            return -1;
-        }
-        else if (v1Val > v2Val) {
-            return 1;
-        }
     }
+    return false;
 }
 
 void AutoUpdateChecker::handleUpdateCheckRequestFinished(QNetworkReply* reply)
 {
     Q_ASSERT(reply->isFinished());
+    reply->deleteLater();
 
     // Delete the QNetworkAccessManager to free resources and
     // prevent the bearer plugin from polling in the background.
     m_Nam->deleteLater();
     m_Nam = nullptr;
 
-    if (reply->error() == QNetworkReply::NoError) {
-        QTextStream stream(reply);
-
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-        stream.setEncoding(QStringConverter::Utf8);
-#else
-        stream.setCodec("UTF-8");
-#endif
-
-        // Read all data and queue the reply for deletion
-        QString jsonString = stream.readAll();
-        reply->deleteLater();
-
-        QJsonParseError error;
-        QJsonDocument jsonDoc = QJsonDocument::fromJson(jsonString.toUtf8(), &error);
-        if (jsonDoc.isNull()) {
-            qWarning() << "Update manifest malformed:" << error.errorString();
-            return;
+    if (reply->error() != QNetworkReply::NoError) {
+        const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        if (status == 404) {
+            // Nothing published on this channel yet.
+            qInfo() << "No Hestia release to check for updates against yet";
         }
-
-        QJsonArray array = jsonDoc.array();
-        if (array.isEmpty()) {
-            qWarning() << "Update manifest doesn't contain an array";
-            return;
+        else {
+            qWarning() << "Update checking failed with error:" << reply->error() << "HTTP status:" << status;
         }
-
-        for (const auto& updateEntry : std::as_const(array)) {
-            if (updateEntry.isObject()) {
-                QJsonObject updateObj = updateEntry.toObject();
-                if (!updateObj.contains("platform") ||
-                        !updateObj.contains("arch") ||
-                        !updateObj.contains("version") ||
-                        !updateObj.contains("browser_url")) {
-                    qWarning() << "Update manifest entry missing vital field";
-                    continue;
-                }
-
-                if (!updateObj["platform"].isString() ||
-                        !updateObj["arch"].isString() ||
-                        !updateObj["version"].isString() ||
-                        !updateObj["browser_url"].isString()) {
-                    qWarning() << "Update manifest entry has unexpected vital field type";
-                    continue;
-                }
-
-                if (updateObj["arch"] == QSysInfo::buildCpuArchitecture() &&
-                        updateObj["platform"] == getPlatform()) {
-
-                    // Check the kernel version minimum if one exists
-                    if (updateObj.contains("kernel_version_at_least") && updateObj["kernel_version_at_least"].isString()) {
-                        QVector<int> requiredVersionQuad;
-                        QVector<int> actualVersionQuad;
-
-                        QString requiredVersion = updateObj["kernel_version_at_least"].toString();
-                        QString actualVersion = QSysInfo::kernelVersion();
-                        parseStringToVersionQuad(requiredVersion, requiredVersionQuad);
-                        parseStringToVersionQuad(actualVersion, actualVersionQuad);
-
-                        if (compareVersion(actualVersionQuad, requiredVersionQuad) < 0) {
-                            qDebug() << "Skipping manifest entry due to kernel version (" << actualVersion << "<" << requiredVersion << ")";
-                            continue;
-                        }
-                    }
-
-                    qDebug() << "Found update manifest match for current platform";
-
-                    QString latestVersion = updateObj["version"].toString();
-                    qDebug() << "Latest version of Moonlight for this platform is:" << latestVersion;
-
-                    QVector<int> latestVersionQuad;
-                    parseStringToVersionQuad(latestVersion, latestVersionQuad);
-
-                    int res = compareVersion(m_CurrentVersionQuad, latestVersionQuad);
-                    if (res < 0) {
-                        // m_CurrentVersionQuad < latestVersionQuad
-                        qDebug() << "Update available";
-                        emit onUpdateAvailable(updateObj["version"].toString(),
-                                               updateObj["browser_url"].toString());
-                        return;
-                    }
-                    else if (res > 0) {
-                        qDebug() << "Update manifest version lower than current version";
-                        return;
-                    }
-                    else {
-                        qDebug() << "Update manifest version equal to current version";
-                        return;
-                    }
-                }
-            }
-            else {
-                qWarning() << "Update manifest contained unrecognized entry:" << updateEntry.toString();
-            }
-        }
-
-        qWarning() << "No entry in update manifest found for current platform:"
-                   << QSysInfo::buildCpuArchitecture() << getPlatform() << QSysInfo::kernelVersion();
+        return;
     }
-    else {
-        qWarning() << "Update checking failed with error:" << reply->error();
-        reply->deleteLater();
+
+    QJsonParseError error;
+    const QJsonDocument jsonDoc = QJsonDocument::fromJson(reply->readAll(), &error);
+    if (!jsonDoc.isObject()) {
+        qWarning() << "Release metadata malformed:" << error.errorString();
+        return;
     }
+
+    const QJsonObject release = jsonDoc.object();
+    const QString url = release.value(QStringLiteral("html_url")).toString();
+    if (url.isEmpty() || release.value(QStringLiteral("draft")).toBool()) {
+        qWarning() << "Release metadata has no published release page";
+        return;
+    }
+
+    // A nightly's version, commit included, is in the release name; a
+    // release's is its tag.
+    const bool nightly = m_CurrentVersion->isNightly();
+    const QString label = release.value(nightly ? QStringLiteral("name") : QStringLiteral("tag_name")).toString();
+    const std::optional<HestiaUpdate::BuildVersion> available =
+            nightly ? HestiaUpdate::versionInNightlyName(label.toStdString())
+                    : HestiaUpdate::parse(label.toStdString());
+    if (!available) {
+        qWarning() << "Release carries no version to compare against:" << label;
+        return;
+    }
+
+    const QString availableVersion = QString::fromStdString(HestiaUpdate::format(*available));
+    qDebug() << "Latest Hestia" << (nightly ? "nightly" : "release") << "is:" << availableVersion;
+
+    const bool newer = nightly ? HestiaUpdate::nightlyIsNewer(*m_CurrentVersion, *available)
+                               : !release.value(QStringLiteral("prerelease")).toBool() &&
+                                 HestiaUpdate::releaseIsNewer(*m_CurrentVersion, *available);
+    if (!newer) {
+        qDebug() << "No newer Hestia build available";
+        return;
+    }
+
+    if (!releaseHasAssetForThisBuild(release.value(QStringLiteral("assets")).toArray())) {
+        qInfo() << "Hestia" << availableVersion << "has no download for this platform";
+        return;
+    }
+
+    qDebug() << "Update available";
+    emit onUpdateAvailable(availableVersion, url);
 }

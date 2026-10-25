@@ -2283,6 +2283,29 @@ private slots:
         });
         QVERIFY(!HestiaHostStatus::evaluate(hermesCapabilities(), probe).needsAttention());
     }
+    void latencySummaryReportsTheSessionAverages()
+    {
+        VIDEO_STATS stats {};
+        QVERIFY(Diagnostics::latencySummary(stats, QStringLiteral("HEVC")).isEmpty());
+
+        stats.decodedFrames = 100;
+        stats.totalDecodeTimeUs = 150000;
+        stats.renderedFrames = 100;
+        stats.totalRenderTimeUs = 300000;
+        stats.framesWithHostProcessingLatency = 100;
+        stats.totalHostProcessingLatency = 4000; // tenths of a millisecond
+        stats.lastRtt = 12;
+        QCOMPARE(Diagnostics::latencySummary(stats, QStringLiteral("HEVC 10-bit HDR")),
+                 QStringLiteral("Average decode time: 1.5 ms, render 3.0 ms, host 4.0 ms, "
+                                "network round trip 12 ms [HEVC 10-bit HDR]"));
+
+        // What wasn't measured is left out.
+        stats.renderedFrames = 0;
+        stats.framesWithHostProcessingLatency = 0;
+        stats.lastRtt = 0;
+        QCOMPARE(Diagnostics::latencySummary(stats, QString()),
+                 QStringLiteral("Average decode time: 1.5 ms"));
+    }
 };
 
 QTEST_GUILESS_MAIN(ClientLogicTest)

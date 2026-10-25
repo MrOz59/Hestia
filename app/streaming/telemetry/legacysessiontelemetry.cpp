@@ -145,6 +145,18 @@ void LegacySessionTelemetry::publishVideoSessionSummary(
         SDL_LOG_CATEGORY_APPLICATION,
         "\nGlobal video stats\n------------------\n%s",
         videoStats);
+
+    const QString latency = Diagnostics::latencySummary(
+        summary.aggregate,
+        QString::fromLatin1(codecName(summary.stream)));
+    std::lock_guard<std::mutex> lock(m_Mutex);
+    m_LatencySummary = latency;
+}
+
+QString LegacySessionTelemetry::latencySummary() const
+{
+    std::lock_guard<std::mutex> lock(m_Mutex);
+    return m_LatencySummary;
 }
 
 void LegacySessionTelemetry::publishAudioWindow(

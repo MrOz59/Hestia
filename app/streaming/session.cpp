@@ -2857,6 +2857,13 @@ DispatchDeferredCleanup:
     m_VideoDecoder = nullptr;
     SDL_UnlockMutex(m_DecoderLock);
 
+    // Each decoder publishes its aggregate stats as it is destroyed, so this
+    // covers the stream since the decoder was last recreated (normally all of it).
+    if (m_Preferences->showLatencySummary) {
+        m_LatencySummary = m_SessionTelemetry->latencySummary();
+        emit latencySummaryChanged();
+    }
+
     // Propagate state changes from the SDL window back to the Qt window
     //
     // NB: We're making a conscious decision not to propagate the maximized

@@ -2227,6 +2227,22 @@ Flickable {
                                   qsTr("You can toggle it at any time while streaming using Ctrl+Alt+Shift+S or Select+L1+R1+X.") + "\n\n" +
                                   qsTr("The performance overlay is not supported on Steam Link or Raspberry Pi.")
                 }
+
+                CheckBox {
+                    id: showLatencySummaryCheck
+                    width: parent.width
+                    text: qsTr("Show a latency summary after streaming")
+                    font.pointSize: 12
+                    checked: StreamingPreferences.showLatencySummary
+                    onCheckedChanged: {
+                        StreamingPreferences.showLatencySummary = checked
+                    }
+
+                    ToolTip.delay: 1000
+                    ToolTip.timeout: 5000
+                    ToolTip.visible: hovered
+                    ToolTip.text: qsTr("When a stream ends, shows its average decode, render and host processing time per frame, the network round trip and the codec.")
+                }
             }
         }
     }

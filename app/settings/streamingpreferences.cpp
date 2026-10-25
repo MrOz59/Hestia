@@ -50,6 +50,7 @@
 #define SER_PACKETSIZE "packetsize"
 #define SER_DETECTNETBLOCKING "detectnetblocking"
 #define SER_SHOWPERFOVERLAY "showperfoverlay"
+#define SER_LATENCYSUMMARY "latencysummary"
 #define SER_SWAPMOUSEBUTTONS "swapmousebuttons"
 #define SER_MOUSEWIGGLE "mousewiggleonconnect"
 #define SER_MUTEONFOCUSLOSS "muteonfocusloss"
@@ -156,6 +157,7 @@ void StreamingPreferences::reload()
     gamepadMouse = settings.value(SER_GAMEPADMOUSE, true).toBool();
     detectNetworkBlocking = settings.value(SER_DETECTNETBLOCKING, true).toBool();
     showPerformanceOverlay = settings.value(SER_SHOWPERFOVERLAY, false).toBool();
+    showLatencySummary = settings.value(SER_LATENCYSUMMARY, false).toBool();
     packetSize = settings.value(SER_PACKETSIZE, 0).toInt();
     swapMouseButtons = settings.value(SER_SWAPMOUSEBUTTONS, false).toBool();
     mouseWiggleOnConnect = settings.value(SER_MOUSEWIGGLE, true).toBool();
@@ -379,6 +381,7 @@ void StreamingPreferences::save()
     settings.setValue(SER_PACKETSIZE, packetSize);
     settings.setValue(SER_DETECTNETBLOCKING, detectNetworkBlocking);
     settings.setValue(SER_SHOWPERFOVERLAY, showPerformanceOverlay);
+    settings.setValue(SER_LATENCYSUMMARY, showLatencySummary);
     settings.setValue(SER_AUDIOCFG, static_cast<int>(audioConfig));
     settings.setValue(
         SER_AUDIO_LATENCY_PROFILE,

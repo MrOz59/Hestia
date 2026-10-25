@@ -42,6 +42,8 @@ public:
     void publishAudioSessionSummary(
             const AudioSessionSummary& summary) override;
 
+    QString latencySummary() const override;
+
 private:
     static void stringifyVideoStats(
             const VIDEO_STATS& stats,
@@ -66,9 +68,10 @@ private:
             int length);
 
     Overlay::OverlayManager* m_OverlayManager;
-    std::mutex m_Mutex;
+    mutable std::mutex m_Mutex;
     Diagnostics::SpikeHistory m_SpikeHistory;
     std::optional<AudioWindowReport> m_LastAudioReport;
+    QString m_LatencySummary;
 };
 
 } // namespace SessionTelemetry

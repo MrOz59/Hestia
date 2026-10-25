@@ -1,6 +1,7 @@
 #include "statsdiagnostics.h"
 
 #include <QCoreApplication>
+#include <QStringList>
 
 namespace Diagnostics {
 
@@ -257,6 +258,37 @@ QString formatOverlayText(const Diagnosis& diagnosis, const SpikeHistory& histor
     if (!spikes.isEmpty()) {
         text += spikes;
         text += QLatin1Char('\n');
+    }
+    return text;
+}
+
+QString latencySummary(const VIDEO_STATS& aggregate, const QString& codec)
+{
+    if (aggregate.decodedFrames == 0) {
+        return QString();
+    }
+
+    QStringList parts;
+    parts.append(Translation::tr("Average decode time: %1 ms")
+                         .arg(perFrameMs(aggregate.totalDecodeTimeUs, aggregate.decodedFrames), 0, 'f', 1));
+    if (aggregate.renderedFrames > 0) {
+        parts.append(Translation::tr("render %1 ms")
+                             .arg(perFrameMs(aggregate.totalRenderTimeUs, aggregate.renderedFrames), 0, 'f', 1));
+    }
+    if (aggregate.framesWithHostProcessingLatency > 0) {
+        // Host processing latency arrives in tenths of a millisecond.
+        parts.append(Translation::tr("host %1 ms")
+                             .arg((aggregate.totalHostProcessingLatency / 10.0) /
+                                          aggregate.framesWithHostProcessingLatency,
+                                  0, 'f', 1));
+    }
+    if (aggregate.lastRtt > 0) {
+        parts.append(Translation::tr("network round trip %1 ms").arg(aggregate.lastRtt));
+    }
+
+    QString text = parts.join(QStringLiteral(", "));
+    if (!codec.isEmpty()) {
+        text += QStringLiteral(" [%1]").arg(codec);
     }
     return text;
 }

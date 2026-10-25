@@ -208,6 +208,7 @@ public:
     Q_PROPERTY(bool gamepadMouse MEMBER gamepadMouse NOTIFY gamepadMouseChanged)
     Q_PROPERTY(bool detectNetworkBlocking MEMBER detectNetworkBlocking NOTIFY detectNetworkBlockingChanged)
     Q_PROPERTY(bool showPerformanceOverlay MEMBER showPerformanceOverlay NOTIFY showPerformanceOverlayChanged)
+    Q_PROPERTY(bool showLatencySummary MEMBER showLatencySummary NOTIFY showLatencySummaryChanged)
     Q_PROPERTY(AudioConfig audioConfig MEMBER audioConfig NOTIFY audioConfigChanged)
     Q_PROPERTY(AudioLatencyProfile audioLatencyProfile MEMBER audioLatencyProfile NOTIFY audioLatencyProfileChanged)
     Q_PROPERTY(VideoCodecConfig videoCodecConfig MEMBER videoCodecConfig NOTIFY videoCodecConfigChanged)
@@ -258,6 +259,7 @@ public:
     bool gamepadMouse;
     bool detectNetworkBlocking;
     bool showPerformanceOverlay;
+    bool showLatencySummary;
     bool swapMouseButtons;
     bool mouseWiggleOnConnect;
     bool muteOnFocusLoss;
@@ -314,6 +316,7 @@ signals:
     void gamepadMouseChanged();
     void detectNetworkBlockingChanged();
     void showPerformanceOverlayChanged();
+    void showLatencySummaryChanged();
     void mouseButtonsChanged();
     void mouseWiggleOnConnectChanged();
     void muteOnFocusLossChanged();

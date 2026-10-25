@@ -134,6 +134,9 @@ public:
     Q_INVOKABLE void start();
     Q_INVOKABLE void interrupt();
     Q_PROPERTY(QStringList launchWarnings MEMBER m_LaunchWarnings NOTIFY launchWarningsChanged);
+    // The latency report shown after the stream ends, when the user asked
+    // for it; set before sessionFinished().
+    Q_PROPERTY(QString latencySummary MEMBER m_LatencySummary NOTIFY latencySummaryChanged);
 
     static
     void getDecoderInfo(SDL_Window* window,
@@ -177,6 +180,8 @@ signals:
     void quitStarting();
 
     void sessionFinished(int portTestResult);
+
+    void latencySummaryChanged();
 
     // Emitted after sessionFinished() when the session is ready to be destroyed
     void readyForDeletion();
@@ -307,6 +312,7 @@ private:
     QByteArray m_TransientNoticeText;
     // Notices from the connection thread, shown once the stream window is up.
     QStringList m_PendingNotices;
+    QString m_LatencySummary;
     Uint32 m_TransientNoticeUntilMs = 0;
     bool m_ShouldExit;
 

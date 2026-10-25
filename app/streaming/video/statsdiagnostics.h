@@ -71,4 +71,11 @@ private:
 // Produces the translated text appended to the debug overlay.
 QString formatOverlayText(const Diagnosis& diagnosis, const SpikeHistory& history);
 
+// The one-line latency report Hestia-Android can show after a stream ends,
+// from the whole session's aggregate: average decode, render and host
+// processing time per frame and the last network round trip, followed by the
+// stream's codec ("HEVC 10-bit HDR") when given. Empty when nothing was
+// decoded. Already translated.
+QString latencySummary(const VIDEO_STATS& aggregate, const QString& codec);
+
 } // namespace Diagnostics

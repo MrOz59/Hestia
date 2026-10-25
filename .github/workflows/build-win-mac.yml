@@ -9,11 +9,19 @@ on:
       ci_version:
         required: true
         type: string
+      # The version the client reports (see build.yml); empty for the plain
+      # app/version.txt number.
+      build_version:
+        required: false
+        type: string
+        default: ''
 
 jobs:
   build:
     env:
       CI_VERSION: ${{ inputs.ci_version }}
+      # Read by app/app.pro.
+      HESTIA_BUILD_VERSION: ${{ inputs.build_version }}
     strategy:
       fail-fast: false
       matrix:

@@ -6,6 +6,7 @@
 # included). The installed binary is `moonlight`, matching the qmake target.
 pkgname=hestia
 # Keep in sync with app/version.txt (the client's single source of version).
+# CI stamps a nightly's commit onto it (0.1.0+abc1234); see build().
 pkgver=0.1.0
 pkgrel=1
 pkgdesc="Moonlight-Qt based desktop client focused on Hermes/Apollo/Sunshine hosts"
@@ -23,6 +24,12 @@ options=('!lto')
 
 build() {
     cd "$startdir/../.."
+
+    # A stamped pkgver is the version the client reports too (app/app.pro
+    # reads HESTIA_BUILD_VERSION). A plain one leaves version.txt in charge.
+    if [[ $pkgver == *+* ]]; then
+        export HESTIA_BUILD_VERSION="$pkgver"
+    fi
 
     qmake6 PREFIX=/usr moonlight-qt.pro
     make release -j"$(nproc)"

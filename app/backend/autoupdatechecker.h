@@ -1,7 +1,13 @@
 #pragma once
 
+#include "updatechannel.h"
+
 #include <QObject>
 #include <QNetworkAccessManager>
+
+#include <optional>
+
+class QJsonArray;
 
 class AutoUpdateChecker : public QObject
 {
@@ -18,12 +24,8 @@ private slots:
     void handleUpdateCheckRequestFinished(QNetworkReply* reply);
 
 private:
-    void parseStringToVersionQuad(QString& string, QVector<int>& version);
+    static bool releaseHasAssetForThisBuild(const QJsonArray& assets);
 
-    int compareVersion(QVector<int>& version1, QVector<int>& version2);
-
-    QString getPlatform();
-
-    QVector<int> m_CurrentVersionQuad;
+    std::optional<HestiaUpdate::BuildVersion> m_CurrentVersion;
     QNetworkAccessManager* m_Nam;
 };

@@ -33,6 +33,12 @@ public:
     virtual void setPacketFeedbackEnabled(bool) noexcept
     {
     }
+
+    // Whether the connection moves the mouse by one pixel and back once it is
+    // up, to wake a sleeping host display. Called before start().
+    virtual void setMouseWiggleOnConnect(bool) noexcept
+    {
+    }
 };
 
 } // namespace ClientTransport

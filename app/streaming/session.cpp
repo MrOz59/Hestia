@@ -2118,6 +2118,8 @@ bool Session::startConnectionAsync()
                                                                          false);
     }
 
+    m_ClientTransport->setMouseWiggleOnConnect(m_Preferences->mouseWiggleOnConnect);
+
     const ClientTransport::StartResult transportStart =
             m_ClientTransport->start();
     if (!transportStart) {

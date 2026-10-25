@@ -73,6 +73,7 @@ StartResult GameStreamClientTransport::start()
     // Set before the connection starts so the first packets are already being
     // reported; the library keeps it off until told otherwise.
     LiSetPacketFeedbackEnabled(m_Context.packetFeedback);
+    LiSetMouseWiggleOnConnect(m_Context.mouseWiggleOnConnect);
 
     const int errorCode = LiStartConnection(
             &hostInfo,
@@ -99,6 +100,11 @@ StartResult GameStreamClientTransport::start()
 void GameStreamClientTransport::setPacketFeedbackEnabled(bool enabled) noexcept
 {
     m_Context.packetFeedback = enabled;
+}
+
+void GameStreamClientTransport::setMouseWiggleOnConnect(bool enabled) noexcept
+{
+    m_Context.mouseWiggleOnConnect = enabled;
 }
 
 void GameStreamClientTransport::interrupt() noexcept

@@ -41,6 +41,9 @@ struct GameStreamContext {
     // it. Off against every other host, which is every host that would not
     // understand the message.
     bool packetFeedback = false;
+    // On, as in Moonlight. A host streaming a session of its own, such as a
+    // Gamescope session, shows its cursor for the motion instead.
+    bool mouseWiggleOnConnect = true;
 };
 
 class GameStreamClientTransport final : public IClientTransport {
@@ -51,6 +54,7 @@ public:
     StartResult start() override;
     void interrupt() noexcept override;
     void setPacketFeedbackEnabled(bool enabled) noexcept override;
+    void setMouseWiggleOnConnect(bool enabled) noexcept override;
     void stop() noexcept override;
 
 private:

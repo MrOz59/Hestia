@@ -1685,6 +1685,23 @@ Flickable {
                         StreamingPreferences.reverseScrollDirection = checked
                     }
                 }
+
+                CheckBox {
+                    id: mouseWiggleCheck
+                    hoverEnabled: true
+                    width: parent.width
+                    text: qsTr("Wiggle the mouse on connect")
+                    font.pointSize: 12
+                    checked: StreamingPreferences.mouseWiggleOnConnect
+                    onCheckedChanged: {
+                        StreamingPreferences.mouseWiggleOnConnect = checked
+                    }
+
+                    ToolTip.delay: 1000
+                    ToolTip.timeout: 10000
+                    ToolTip.visible: hovered
+                    ToolTip.text: qsTr("Moves the mouse by one pixel and back when the stream starts, to wake the host's display. Turn it off to keep the cursor hidden in Gamescope sessions on hosts that don't already ignore it.")
+                }
             }
         }
 

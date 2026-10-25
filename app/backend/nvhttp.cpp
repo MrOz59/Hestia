@@ -711,6 +711,28 @@ bool NvHTTP::getHestiaDiagnostics(QJsonObject* diagnostics)
     return true;
 }
 
+HestiaHostStatus NvHTTP::probeHestiaHostStatus(const HestiaCapabilities& capabilities)
+{
+    if (!capabilities.supportsProtocolV1) {
+        return HestiaHostStatus {};
+    }
+
+    HestiaHostProbe probe;
+    bool canViewStreams = true;
+    if (capabilities.features.permissionSystem) {
+        probe.permissionsOk = getHestiaClientPermissions(&probe.permissions, &probe.permissionsHttpStatus);
+        canViewStreams = probe.permissionsOk &&
+                probe.permissions.value("permissions").toObject().value("view_streams").toBool();
+    }
+    if (canViewStreams) {
+        probe.diagnosticsFetched = true;
+        probe.diagnosticsOk = getHestiaDiagnostics(&probe.diagnostics);
+        probe.displayFetched = true;
+        probe.displayOk = getHestiaDisplayStatus(&probe.display);
+    }
+    return HestiaHostStatus::evaluate(capabilities, probe);
+}
+
 bool NvHTTP::getHestiaClipboard(QString* text)
 {
     Q_ASSERT(text != nullptr);

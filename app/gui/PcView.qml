@@ -351,13 +351,33 @@ CenteredGridView {
                     }
                 }
                 NavigableMenuItem {
-                    // The badge's tooltip, for keyboard and gamepad users.
+                    // What the badge says, asked again now, like Hestia-Android's
+                    // Hermes dialog; also reachable with a keyboard or gamepad.
                     text: qsTr("Hermes Status")
                     visible: model.online && model.paired && model.hestiaStatusLevel !== ""
                     onTriggered: {
-                        hestiaStatusDialog.text = model.hestiaStatusDetails
-                        hestiaStatusDialog.open()
+                        var status = computerModel.refreshHestiaStatus(index)
+                        var lines = status.valid ? status.details
+                                                 : qsTr("This host no longer reports the Hermes API.")
+                        if (status.serverVersion) {
+                            lines += "\n\n" + qsTr("Hermes %1 · Hestia protocol v%2")
+                                                    .arg(status.serverVersion).arg(status.protocol)
+                        }
+                        hermesStatusDialog.pcIndex = index
+                        hermesStatusDialog.recoveryOffered = status.recoveryOffered === true
+                        if (hermesStatusDialog.recoveryOffered) {
+                            lines += "\n\n" + qsTr("Turn the host's physical monitor back on? Any app still running on the host will be closed.")
+                        }
+                        hermesStatusDialog.title = qsTr("Hermes · %1").arg(model.name)
+                        hermesStatusDialog.text = lines
+                        hermesStatusDialog.open()
                     }
+                }
+                NavigableMenuItem {
+                    text: qsTr("Open Host Web UI")
+                    visible: model.online && SystemProperties.hasBrowser &&
+                             computerModel.getHostWebUiUrl(index) !== ""
+                    onTriggered: Qt.openUrlExternally(computerModel.getHostWebUiUrl(index))
                 }
                 NavigableMenuItem {
                     text: qsTr("Hermes Display Status")
@@ -603,6 +623,23 @@ CenteredGridView {
     }
 
     NavigableMessageDialog { id: hestiaStatusDialog; standardButtons: Dialog.Ok }
+    NavigableMessageDialog {
+        id: hermesStatusDialog
+        property int pcIndex: -1
+        // When the monitor was left off and this client may turn it back on,
+        // the dialog asks; otherwise it only reports.
+        property bool recoveryOffered: false
+        standardButtons: recoveryOffered ? (Dialog.Yes | Dialog.No) : Dialog.Ok
+        onAccepted: {
+            if (recoveryOffered) {
+                hestiaStatusDialog.text = computerModel.recoverHestiaDisplay(pcIndex)
+                        ? qsTr("Physical display restored.")
+                        : qsTr("Physical display recovery is unavailable.")
+                hestiaStatusDialog.open()
+                computerModel.refreshHestiaStatus(pcIndex)
+            }
+        }
+    }
     NavigableDialog {
         id: hestiaDiagnosticsDialog
         property alias text: diagnosticsLabel.text

@@ -14,31 +14,15 @@
 #define SER_HOSTS "hosts"
 #define SER_HOSTS_BACKUP "hostsbackup"
 
-// Ask a paired Hermes host what Hestia-Android's status badge shows: this
-// client's permissions, then, when it may see them, the host's diagnostics
-// and display state. Every other host gets an invalid status and no badge.
+// What Hestia-Android's status badge shows for a paired Hermes host; every
+// other host gets an invalid status and no badge.
 static HestiaHostStatus probeHestiaHostStatus(NvHTTP& http, NvComputer* computer,
                                               const HestiaCapabilities& capabilities)
 {
-    if (!capabilities.supportsProtocolV1 || computer->pairState != NvComputer::PS_PAIRED) {
+    if (computer->pairState != NvComputer::PS_PAIRED) {
         return HestiaHostStatus {};
     }
-
-    HestiaHostProbe probe;
-    bool canViewStreams = true;
-    if (capabilities.features.permissionSystem) {
-        probe.permissionsOk = http.getHestiaClientPermissions(&probe.permissions,
-                                                              &probe.permissionsHttpStatus);
-        canViewStreams = probe.permissionsOk &&
-                probe.permissions.value("permissions").toObject().value("view_streams").toBool();
-    }
-    if (canViewStreams) {
-        probe.diagnosticsFetched = true;
-        probe.diagnosticsOk = http.getHestiaDiagnostics(&probe.diagnostics);
-        probe.displayFetched = true;
-        probe.displayOk = http.getHestiaDisplayStatus(&probe.display);
-    }
-    return HestiaHostStatus::evaluate(capabilities, probe);
+    return http.probeHestiaHostStatus(capabilities);
 }
 
 class PcMonitorThread : public QThread

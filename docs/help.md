@@ -23,13 +23,15 @@ button and its IP address.
 A Hermes host can usually say what is wrong itself. When it reports
 something that needs attention, its tile shows a warning or error badge;
 hover over it, or open **Hermes Status** in the PC's menu (right click, or the
-menu button on a gamepad), for what the host said. The menu also has:
+menu button on a gamepad), which asks the host again and, when the monitor was
+left off, offers to turn it back on. The menu also has:
 
 - **Hermes Diagnostics**: the host's readiness checks, which encoder it uses,
   and its live sessions.
 - **Hermes Permissions**: what this client is allowed to do. A client missing
   the launch or input permission connects but cannot start apps or control
-  them; grant it in the Hermes web UI under PIN → Device Management.
+  them; grant it in the Hermes web UI (**Open Host Web UI** in the same menu)
+  under PIN → Device Management.
 - **Hermes Display Status** and **Recover Physical Monitor**: when a stream
   left the host's monitor switched off.
 

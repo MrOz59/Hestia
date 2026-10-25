@@ -1,6 +1,7 @@
 #include "computermodel.h"
 
 #include <QJsonArray>
+#include <QUrl>
 #include <QThreadPool>
 #include <QClipboard>
 #include <QGuiApplication>
@@ -264,6 +265,58 @@ QVariantMap ComputerModel::getHestiaClientPermissions(int computerIndex)
     NvHTTP http(computer);
     QJsonObject permissions;
     return http.getHestiaClientPermissions(&permissions) ? permissions.toVariantMap() : QVariantMap{};
+}
+
+QVariantMap ComputerModel::refreshHestiaStatus(int computerIndex)
+{
+    if (computerIndex < 0 || computerIndex >= m_Computers.count()) {
+        return {};
+    }
+    NvComputer* computer = m_Computers[computerIndex];
+
+    HestiaCapabilities capabilities;
+    bool paired;
+    {
+        QReadLocker lock(&computer->lock);
+        capabilities = computer->hestiaCapabilities;
+        paired = computer->pairState == NvComputer::PS_PAIRED;
+    }
+
+    NvHTTP http(computer);
+    const HestiaHostStatus status = paired ? http.probeHestiaHostStatus(capabilities) : HestiaHostStatus {};
+    if (computer->setHestiaStatus(status)) {
+        emit dataChanged(createIndex(computerIndex, 0), createIndex(computerIndex, 0));
+    }
+
+    return {
+        {"valid", status.valid},
+        {"details", status.valid ? status.details() : QString()},
+        {"recoveryOffered", status.displayRecoveryOffered},
+        {"serverVersion", capabilities.serverVersion},
+        {"protocol", capabilities.hestiaProtocol},
+    };
+}
+
+QString ComputerModel::getHostWebUiUrl(int computerIndex)
+{
+    if (computerIndex < 0 || computerIndex >= m_Computers.count()) {
+        return QString();
+    }
+    NvComputer* computer = m_Computers[computerIndex];
+
+    QReadLocker lock(&computer->lock);
+    // GeForce Experience has no web UI. Sunshine and its forks serve theirs
+    // one port above the GameStream HTTP port, 47990 by default, where Hermes
+    // also serves the Hestia API.
+    if (computer->isNvidiaServerSoftware || computer->activeAddress.isNull()) {
+        return QString();
+    }
+    QUrl url;
+    url.setScheme(QStringLiteral("https"));
+    url.setHost(computer->activeAddress.address());
+    url.setPort(computer->activeAddress.port() + 1);
+    url.setPath(QStringLiteral("/"));
+    return url.toString();
 }
 
 QVariantMap ComputerModel::getHestiaDiagnostics(int computerIndex)

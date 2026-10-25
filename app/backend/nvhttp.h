@@ -4,6 +4,7 @@
 #include "nvapp.h"
 #include "nvaddress.h"
 #include "hestiacapabilities.h"
+#include "hestiahoststatus.h"
 
 #include <Limelight.h>
 
@@ -157,6 +158,13 @@ public:
 
     bool
     getHestiaDiagnostics(QJsonObject* diagnostics);
+
+    // Ask a Hermes host what its tile's status badge should show: this
+    // client's permissions, then, when it may see them, the host's
+    // diagnostics and display state. Not valid for a host without the
+    // Hestia v1 API.
+    HestiaHostStatus
+    probeHestiaHostStatus(const HestiaCapabilities& capabilities);
 
     bool
     getHestiaClipboard(QString* text);

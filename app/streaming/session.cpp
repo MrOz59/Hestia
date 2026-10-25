@@ -986,7 +986,13 @@ void Session::stopMicrophone()
 
 void Session::showTransientNotice(const QString& text)
 {
-    m_TransientNoticeText = text.toUtf8();
+    // Notices that arrive together are shown together.
+    if (m_TransientNoticeUntilMs != 0 && !m_TransientNoticeText.isEmpty()) {
+        m_TransientNoticeText += "\n\n" + text.toUtf8();
+    }
+    else {
+        m_TransientNoticeText = text.toUtf8();
+    }
     m_OverlayManager.updateOverlayText(Overlay::OverlayStatusUpdate, m_TransientNoticeText.constData());
     m_OverlayManager.setOverlayState(Overlay::OverlayStatusUpdate, true);
     m_TransientNoticeUntilMs = SDL_GetTicks() + 6000;
@@ -2104,10 +2110,21 @@ bool Session::startConnectionAsync()
             if (!m_HostProtocol->prepareSession(
                         m_HostSessionRequest,
                         &m_HestiaSessionId,
-                        &m_NegotiatedExtensions) &&
-                    m_Computer->hestiaCapabilities.features.multiUserSessions) {
-                emit displayLaunchError(tr("The host could not reserve an independent streaming session. Check the Hermes-KMS driver and isolated-session setup."));
-                return false;
+                        &m_NegotiatedExtensions)) {
+                if (m_Computer->hestiaCapabilities.features.multiUserSessions) {
+                    emit displayLaunchError(tr("The host could not reserve an independent streaming session. Check the Hermes-KMS driver and isolated-session setup."));
+                    return false;
+                }
+
+                // The stream still starts, as a plain one, but without the
+                // virtual display and settings asked for; say why once it is up,
+                // as Hestia-Android does.
+                const QString reason = m_HostProtocol->lastPrepareFailure();
+                if (!reason.isEmpty()) {
+                    m_PendingNotices.append(
+                            tr("Hermes didn't prepare this session (%1).\nStreaming with the host's own display settings.")
+                                    .arg(reason));
+                }
             }
 
             // Only the host's answer turns an extension on. Announcing it is a
@@ -2441,6 +2458,11 @@ void Session::exec()
 
     // Toggle the stats overlay if requested by the user
     m_OverlayManager.setOverlayState(Overlay::OverlayDebug, m_Preferences->showPerformanceOverlay);
+
+    for (const QString& notice : std::as_const(m_PendingNotices)) {
+        showTransientNotice(notice);
+    }
+    m_PendingNotices.clear();
 
     startMicrophone();
 

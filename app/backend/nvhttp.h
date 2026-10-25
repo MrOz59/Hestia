@@ -133,10 +133,13 @@ public:
     bool
     probeHestiaDiagnostics(HestiaPreflight* preflight);
 
+    // failureReason, when given, receives why a Hermes host did not prepare
+    // the session: its own error message when it sent one.
     bool
     prepareHestiaSession(const QJsonObject& sessionRequest,
                          QString* sessionId = nullptr,
-                         QMap<QString, uint32_t>* negotiatedExtensions = nullptr);
+                         QMap<QString, uint32_t>* negotiatedExtensions = nullptr,
+                         QString* failureReason = nullptr);
 
     bool
     stopHestiaSession(const QString& sessionId = QString());

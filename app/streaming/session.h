@@ -305,6 +305,8 @@ private:
     QScopedPointer<NvHTTP> m_HestiaClipboardHttp;
     std::unique_ptr<MicrophoneCapture> m_Microphone;
     QByteArray m_TransientNoticeText;
+    // Notices from the connection thread, shown once the stream window is up.
+    QStringList m_PendingNotices;
     Uint32 m_TransientNoticeUntilMs = 0;
     bool m_ShouldExit;
 

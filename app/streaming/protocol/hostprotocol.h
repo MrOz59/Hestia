@@ -99,6 +99,13 @@ public:
                                 QMap<QString, uint32_t>* negotiatedExtensions = nullptr) = 0;
     virtual QString launchSession(const LaunchRequest& request) = 0;
     virtual bool stopSession(const QString& sessionId) = 0;
+
+    // Why the last prepareSession() failed, in words for the user; empty
+    // when it succeeded or the protocol cannot say.
+    virtual QString lastPrepareFailure() const
+    {
+        return QString();
+    }
 };
 
 // The Hermes extension payload remains an adapter detail. Keeping this

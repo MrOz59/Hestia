@@ -16,9 +16,11 @@ public:
                         QMap<QString, uint32_t>* negotiatedExtensions = nullptr) override;
     QString launchSession(const LaunchRequest& request) override;
     bool stopSession(const QString& sessionId) override;
+    QString lastPrepareFailure() const override;
 
 private:
     NvComputer* m_Computer;
+    QString m_LastPrepareFailure;
 };
 
 } // namespace HostProtocol

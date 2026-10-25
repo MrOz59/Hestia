@@ -12,6 +12,9 @@ on:
   pull_request:
     branches:
       - master
+      # Post-release work lands on dev, so changes headed there get the same
+      # signal. Only master publishes the nightly.
+      - dev
   # Manual runs can opt into the heavier / non-focus targets (AppImage
   # packaging, Steam Link, Windows, macOS) that aren't part of the default
   # push/PR signal.

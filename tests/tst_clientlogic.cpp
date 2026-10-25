@@ -1,6 +1,7 @@
 #include <QtTest>
 
 #include "backend/hestiacapabilities.h"
+#include "backend/updatechannel.h"
 #include "settings/streamingpreferences.h"
 #include "streaming/audio/audiotelemetry.h"
 #include "streaming/audio/bufferpolicy.h"
@@ -2035,6 +2036,59 @@ private slots:
         QVERIFY(HermesExtensions::parseNegotiated(QJsonObject {}).isEmpty());
         QVERIFY(HermesExtensions::parseNegotiated(
                         QJsonObject {{"extensions", 12}}).isEmpty());
+    }
+    void updateChannelParsesReleaseAndNightlyVersions()
+    {
+        const auto release = HestiaUpdate::parse("v0.1.0");
+        QVERIFY(release.has_value());
+        QVERIFY(!release->isNightly());
+        QVERIFY(release->release == (std::vector<int> {0, 1, 0}));
+
+        const auto nightly = HestiaUpdate::parse("0.1.0+ABC1234");
+        QVERIFY(nightly.has_value());
+        QVERIFY(nightly->isNightly());
+        QCOMPARE(QString::fromStdString(nightly->commit), QStringLiteral("abc1234"));
+        QCOMPARE(QString::fromStdString(HestiaUpdate::format(*nightly)), QStringLiteral("0.1.0+abc1234"));
+
+        QVERIFY(!HestiaUpdate::parse("").has_value());
+        QVERIFY(!HestiaUpdate::parse("nightly").has_value());
+        QVERIFY(!HestiaUpdate::parse("0.1.0+").has_value());
+        QVERIFY(!HestiaUpdate::parse("0.1.0+xyz").has_value());
+        QVERIFY(!HestiaUpdate::parse("0..1").has_value());
+        QVERIFY(!HestiaUpdate::parse("1.0-beta").has_value());
+    }
+
+    void updateChannelOffersOnlyNewerReleases()
+    {
+        const auto current = *HestiaUpdate::parse("0.1.0");
+        QVERIFY(HestiaUpdate::releaseIsNewer(current, *HestiaUpdate::parse("v0.1.1")));
+        QVERIFY(HestiaUpdate::releaseIsNewer(current, *HestiaUpdate::parse("v1.0")));
+        QVERIFY(!HestiaUpdate::releaseIsNewer(current, *HestiaUpdate::parse("v0.1")));
+        QVERIFY(!HestiaUpdate::releaseIsNewer(current, *HestiaUpdate::parse("v0.0.9")));
+    }
+
+    void updateChannelOffersNightliesFromAnotherCommit()
+    {
+        const auto current = *HestiaUpdate::parse("0.1.0+abc1234");
+        QVERIFY(HestiaUpdate::nightlyIsNewer(current, *HestiaUpdate::parse("0.1.0+def5678")));
+        QVERIFY(HestiaUpdate::nightlyIsNewer(current, *HestiaUpdate::parse("0.2.0+abc1234")));
+        // The same commit, however abbreviated.
+        QVERIFY(!HestiaUpdate::nightlyIsNewer(current, *HestiaUpdate::parse("0.1.0+abc1234")));
+        QVERIFY(!HestiaUpdate::nightlyIsNewer(current, *HestiaUpdate::parse("0.1.0+abc123")));
+        // Based on an older release than this build, or not a nightly at all.
+        QVERIFY(!HestiaUpdate::nightlyIsNewer(*HestiaUpdate::parse("0.2.0+abc1234"),
+                                              *HestiaUpdate::parse("0.1.0+def5678")));
+        QVERIFY(!HestiaUpdate::nightlyIsNewer(current, *HestiaUpdate::parse("0.2.0")));
+    }
+
+    void updateChannelReadsTheNightlyReleaseName()
+    {
+        const auto stamped = HestiaUpdate::versionInNightlyName("Hestia nightly (v0.1.0+abc1234)");
+        QVERIFY(stamped.has_value());
+        QCOMPARE(QString::fromStdString(HestiaUpdate::format(*stamped)), QStringLiteral("0.1.0+abc1234"));
+        // Nightlies published before builds were stamped carry no commit.
+        QVERIFY(!HestiaUpdate::versionInNightlyName("Hestia nightly (v0.1.0)").has_value());
+        QVERIFY(!HestiaUpdate::versionInNightlyName("").has_value());
     }
 };
 

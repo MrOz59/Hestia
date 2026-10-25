@@ -69,8 +69,10 @@ jobs:
             libva-dev libvdpau-dev libdrm-dev libplacebo-dev \
             libxkbcommon-dev wayland-protocols libwayland-dev libx11-dev
 
+      # HESTIA_LINUX_TARBALL: this build ships as the release tarball, so it
+      # checks Hestia's releases for a newer one (autoupdatechecker.cpp).
       - name: Configure (qmake6)
-        run: qmake6 moonlight-qt.pro
+        run: qmake6 moonlight-qt.pro DEFINES+=HESTIA_LINUX_TARBALL
 
       - name: Configure client logic tests
         working-directory: tests

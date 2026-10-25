@@ -10,6 +10,31 @@
 // version numbers, against which every Hestia build looks out of date.
 #define HESTIA_RELEASES_API "https://api.github.com/repos/MrOz59/Hestia/releases/"
 
+// Only check on builds nothing else updates: the ones installed by hand from
+// a release page. That is every Windows, macOS and Steam Link build, and on
+// Linux the AppImage, the Arch package and the tarball Hestia publishes, whose
+// builds say so (scripts/build-appimage.sh, packaging/arch/PKGBUILD,
+// .github/workflows/build-linux.yml). A plain build from source, the way a
+// distribution packages it, leaves updates to the distribution.
+#if defined(Q_OS_WIN32) || defined(Q_OS_DARWIN) || defined(STEAM_LINK) || \
+    defined(APP_IMAGE) || defined(HESTIA_ARCH_PACKAGE) || defined(HESTIA_LINUX_TARBALL)
+#define HESTIA_CHECKS_FOR_UPDATES
+#endif
+
+#if defined(HESTIA_ARCH_PACKAGE) || defined(HESTIA_LINUX_TARBALL)
+namespace {
+
+// The architecture as Linux package names spell it: Qt says arm64 where
+// pacman and Hestia's tarballs say aarch64.
+QString linuxArchitecture()
+{
+    const QString arch = QSysInfo::buildCpuArchitecture();
+    return arch == QStringLiteral("arm64") ? QStringLiteral("aarch64") : arch;
+}
+
+}
+#endif
+
 AutoUpdateChecker::AutoUpdateChecker(QObject *parent) :
     QObject(parent)
 {
@@ -38,7 +63,7 @@ void AutoUpdateChecker::start()
         return;
     }
 
-#if defined(Q_OS_WIN32) || defined(Q_OS_DARWIN) || defined(STEAM_LINK) || defined(APP_IMAGE) // Only run update checker on platforms without auto-update
+#ifdef HESTIA_CHECKS_FOR_UPDATES
     if (!m_CurrentVersion) {
         qWarning() << "Not checking for updates: unrecognized version" << VERSION_STR;
         return;
@@ -72,10 +97,10 @@ void AutoUpdateChecker::start()
 #endif
 }
 
-// Only point at a release that has something to replace this build with.
-// Hestia publishes Linux packages, so a Windows or macOS build (best-effort)
-// is not sent to a release page that has nothing for it, and neither is an
-// AppImage when that nightly's AppImage build failed.
+// Only point at a release that has something to replace this build with, in
+// the same form. Hestia publishes Linux packages, so a Windows or macOS build
+// (best-effort) is not sent to a release page that has nothing for it, and
+// neither is an AppImage when that nightly's AppImage build failed.
 bool AutoUpdateChecker::releaseHasAssetForThisBuild(const QJsonArray& assets)
 {
     for (const auto& asset : assets) {
@@ -83,6 +108,18 @@ bool AutoUpdateChecker::releaseHasAssetForThisBuild(const QJsonArray& assets)
 #if defined(APP_IMAGE)
         if (name.endsWith(QStringLiteral(".AppImage"), Qt::CaseInsensitive) &&
                 name.contains(QSysInfo::buildCpuArchitecture())) {
+            return true;
+        }
+#elif defined(HESTIA_ARCH_PACKAGE)
+        // hestia-0.1.0+abc1234-1-x86_64.pkg.tar.zst
+        if (name.startsWith(QStringLiteral("hestia-")) &&
+                name.contains(QStringLiteral("-%1.pkg.tar.").arg(linuxArchitecture()))) {
+            return true;
+        }
+#elif defined(HESTIA_LINUX_TARBALL)
+        // hestia-0.1.0+abc1234-linux-x86_64.tar.gz
+        if (name.startsWith(QStringLiteral("hestia-")) &&
+                name.endsWith(QStringLiteral("-linux-%1.tar.gz").arg(linuxArchitecture()))) {
             return true;
         }
 #elif defined(STEAM_LINK)

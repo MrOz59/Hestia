@@ -31,7 +31,9 @@ build() {
         export HESTIA_BUILD_VERSION="$pkgver"
     fi
 
-    qmake6 PREFIX=/usr moonlight-qt.pro
+    # HESTIA_ARCH_PACKAGE: installed by hand from a release, so the client
+    # checks Hestia's releases for a newer package (autoupdatechecker.cpp).
+    qmake6 PREFIX=/usr moonlight-qt.pro DEFINES+=HESTIA_ARCH_PACKAGE
     make release -j"$(nproc)"
 }
 

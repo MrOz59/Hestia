@@ -515,9 +515,9 @@ CenteredGridView {
     ErrorMessageDialog {
         id: errorDialog
 
-        // Using Setup-Guide here instead of Troubleshooting because it's likely that users
-        // will arrive here by forgetting to enable GameStream or not forwarding ports.
-        helpUrl: "https://github.com/moonlight-stream/moonlight-docs/wiki/Setup-Guide"
+        // Host setup rather than connection problems: users likely arrive here
+        // having not finished setting the host up or forwarded its ports.
+        helpUrl: "https://github.com/MrOz59/Hestia/blob/HEAD/docs/help.md#setting-up-a-host"
     }
 
     NavigableMessageDialog {

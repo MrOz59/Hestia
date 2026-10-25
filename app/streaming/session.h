@@ -100,6 +100,8 @@ public:
     }
 };
 
+class MicrophoneCapture;
+
 class Session : public QObject
 {
     Q_OBJECT
@@ -201,6 +203,16 @@ private:
 
     void pollHestiaClipboardSync();
 
+    // Microphone passthrough, when the user turned it on and the host
+    // negotiated it. Started once the stream window is up, stopped before
+    // the connection is.
+    void startMicrophone();
+    void stopMicrophone();
+
+    // A few seconds of text in the stream's status overlay.
+    void showTransientNotice(const QString& text);
+    void expireTransientNotice();
+
     bool populateDecoderProperties(SDL_Window* window);
 
     void getWindowDimensions(int& x, int& y,
@@ -291,6 +303,9 @@ private:
     Uint32 m_LastHestiaClipboardSyncCheckMs;
     QString m_LastHestiaClipboardText;
     QScopedPointer<NvHTTP> m_HestiaClipboardHttp;
+    std::unique_ptr<MicrophoneCapture> m_Microphone;
+    QByteArray m_TransientNoticeText;
+    Uint32 m_TransientNoticeUntilMs = 0;
     bool m_ShouldExit;
 
     bool m_AsyncConnectionSuccess;

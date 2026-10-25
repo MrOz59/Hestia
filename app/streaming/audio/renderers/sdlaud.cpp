@@ -17,8 +17,9 @@ SdlAudioRenderer::SdlAudioRenderer(
       m_EstimatedBufferedAudioUs(0),
       m_LastPlaybackAccountingUs(0)
 {
-    SDL_assert(!SDL_WasInit(SDL_INIT_AUDIO));
-
+    // The audio subsystem is reference counted, and the microphone capture
+    // (streaming/audio/microphone) holds its own reference while it records,
+    // so it may already be initialized here, or still be after this quits it.
     if (SDL_InitSubSystem(SDL_INIT_AUDIO) != 0) {
         SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
                      "SDL_InitSubSystem(SDL_INIT_AUDIO) failed: %s",
@@ -132,7 +133,6 @@ SdlAudioRenderer::~SdlAudioRenderer()
     }
 
     SDL_QuitSubSystem(SDL_INIT_AUDIO);
-    SDL_assert(!SDL_WasInit(SDL_INIT_AUDIO));
 }
 
 void* SdlAudioRenderer::getAudioBuffer(int*)

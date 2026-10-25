@@ -209,6 +209,7 @@ SOURCES += \
     streaming/video/receiver/gamestreamvideoreceiver.cpp \
     streaming/session.cpp \
     streaming/audio/renderers/sdlaud.cpp \
+    streaming/audio/microphone/microphonecapture.cpp \
     gui/computermodel.cpp \
     gui/appmodel.cpp \
     streaming/bandwidth.cpp \
@@ -273,6 +274,7 @@ HEADERS += \
     streaming/session.h \
     streaming/audio/renderers/renderer.h \
     streaming/audio/renderers/sdl.h \
+    streaming/audio/microphone/microphonecapture.h \
     gui/computermodel.h \
     gui/appmodel.h \
     streaming/video/decoder.h \

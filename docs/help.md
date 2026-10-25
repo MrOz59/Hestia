@@ -37,6 +37,14 @@ For connection failures in general (blocked ports, firewalls, streaming over
 the Internet), Moonlight's [Troubleshooting guide][moonlight-troubleshooting]
 applies as written; **Test Network** in the PC's menu runs the same port test.
 
+## Microphone
+
+**Stream my microphone to the host**, under Audio Settings, sends this
+computer's microphone to hosts that accept it. On Hermes, turn on **Stream the
+client's microphone** in its audio settings; Hermes delivers it to independent
+(isolated) sessions, not to the host's own desktop. When a host doesn't accept
+it, the stream starts without it and says so for a few seconds.
+
 ## Video and gamepads
 
 Decoding and controller handling are Moonlight-Qt's, unchanged:

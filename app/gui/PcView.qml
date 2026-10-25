@@ -265,28 +265,31 @@ CenteredGridView {
             running: visible
         }
 
-        // Streaming-readiness warning badge: shown when the host is online and
-        // paired but its Hermes preflight reports a problem (e.g. software
-        // encoding fallback, no virtual-display backend). Advisory only — the
-        // user can still connect; this just sets expectations up front.
+        // Hermes status badge, like Hestia-Android's: shown when an online,
+        // paired Hermes host reports something that needs attention, such as a
+        // failing readiness check, a missing permission, a pairing the host no
+        // longer accepts or a monitor left off. Advisory only: the user can
+        // still connect; this just says up front what will go wrong.
         Image {
-            id: readinessWarningIcon
+            id: hestiaStatusIcon
             anchors.right: pcIcon.right
             anchors.top: pcIcon.top
             anchors.rightMargin: 8
             anchors.topMargin: 8
-            visible: model.online && model.paired && model.hestiaReadinessWarning
-            source: "qrc:/res/warning_FILL1_wght300_GRAD200_opsz24.svg"
+            visible: model.online && model.paired &&
+                     (model.hestiaStatusLevel === "warning" || model.hestiaStatusLevel === "error")
+            source: model.hestiaStatusLevel === "error" ? "qrc:/res/baseline-error_outline-24px.svg"
+                                                        : "qrc:/res/warning_FILL1_wght300_GRAD200_opsz24.svg"
             sourceSize {
                 width: 36
                 height: 36
             }
 
-            ToolTip.visible: readinessWarningMouseArea.containsMouse
-            ToolTip.text: model.hestiaReadinessDetails
+            ToolTip.visible: hestiaStatusMouseArea.containsMouse
+            ToolTip.text: model.hestiaStatusDetails
 
             MouseArea {
-                id: readinessWarningMouseArea
+                id: hestiaStatusMouseArea
                 anchors.fill: parent
                 hoverEnabled: true
             }
@@ -345,6 +348,15 @@ CenteredGridView {
                     onTriggered: {
                         computerModel.testConnectionForComputer(index)
                         testConnectionDialog.open()
+                    }
+                }
+                NavigableMenuItem {
+                    // The badge's tooltip, for keyboard and gamepad users.
+                    text: qsTr("Hermes Status")
+                    visible: model.online && model.paired && model.hestiaStatusLevel !== ""
+                    onTriggered: {
+                        hestiaStatusDialog.text = model.hestiaStatusDetails
+                        hestiaStatusDialog.open()
                     }
                 }
                 NavigableMenuItem {

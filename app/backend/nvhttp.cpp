@@ -613,9 +613,12 @@ bool NvHTTP::getHestiaServerCommands(QJsonArray* commands)
     return true;
 }
 
-bool NvHTTP::getHestiaClientPermissions(QJsonObject* permissions)
+bool NvHTTP::getHestiaClientPermissions(QJsonObject* permissions, int* httpStatus)
 {
     Q_ASSERT(permissions != nullptr);
+    if (httpStatus != nullptr) {
+        *httpStatus = 0;
+    }
     if (m_ServerCert.isNull()) {
         return false;
     }
@@ -638,6 +641,9 @@ bool NvHTTP::getHestiaClientPermissions(QJsonObject* permissions)
     const bool success = reply->isFinished() && reply->error() == QNetworkReply::NoError &&
             reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() >= 200 &&
             reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() < 300;
+    if (httpStatus != nullptr && reply->isFinished()) {
+        *httpStatus = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+    }
     QJsonParseError error;
     const QJsonDocument response = QJsonDocument::fromJson(reply->readAll(), &error);
     delete reply;

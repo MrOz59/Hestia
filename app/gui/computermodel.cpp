@@ -59,25 +59,27 @@ QVariant ComputerModel::data(const QModelIndex& index, int role) const
     case HestiaClipboardSyncRole:
         return computer->hestiaCapabilities.supportsProtocolV1 &&
                computer->hestiaCapabilities.features.clipboardSync;
-    case HestiaReadinessWarningRole:
-        return computer->hestiaCapabilities.supportsProtocolV1 &&
-               computer->hestiaPreflight.valid &&
-               (!computer->hestiaPreflight.ready || !computer->hestiaPreflight.problems().isEmpty());
-    case HestiaReadinessDetailsRole: {
-        // A newline-separated list of the non-ok check messages, for a tooltip.
-        if (!computer->hestiaCapabilities.supportsProtocolV1 ||
-                !computer->hestiaPreflight.valid) {
+    case HestiaStatusLevelRole:
+        // "" for a host without a status (not Hermes, or not paired), else
+        // "ok", "info", "warning" or "error"; the PC tile badges the last two.
+        if (!computer->hestiaStatus.valid) {
             return QString();
         }
-        QStringList lines;
-        for (const auto& problem : computer->hestiaPreflight.problems()) {
-            lines.append(problem.message);
+        switch (computer->hestiaStatus.level()) {
+        case HestiaHostFinding::Level::Error:
+            return QStringLiteral("error");
+        case HestiaHostFinding::Level::Warning:
+            return QStringLiteral("warning");
+        case HestiaHostFinding::Level::Info:
+            return QStringLiteral("info");
+        case HestiaHostFinding::Level::Ok:
+        default:
+            return QStringLiteral("ok");
         }
-        if (lines.isEmpty() && !computer->hestiaPreflight.ready) {
-            lines.append(tr("Hermes reports that this host is not ready to stream."));
-        }
-        return lines.join('\n');
-    }
+    case HestiaStatusDetailsRole:
+        // One line per finding, most severe first, for the tooltip and the
+        // PC menu's Hermes Status entry.
+        return computer->hestiaStatus.valid ? computer->hestiaStatus.details() : QString();
     case DetailsRole: {
         QString state, pairState;
 
@@ -150,8 +152,8 @@ QHash<int, QByteArray> ComputerModel::roleNames() const
     names[HestiaServerCommandsRole] = "hestiaServerCommands";
     names[HestiaPermissionSystemRole] = "hestiaPermissionSystem";
     names[HestiaClipboardSyncRole] = "hestiaClipboardSync";
-    names[HestiaReadinessWarningRole] = "hestiaReadinessWarning";
-    names[HestiaReadinessDetailsRole] = "hestiaReadinessDetails";
+    names[HestiaStatusLevelRole] = "hestiaStatusLevel";
+    names[HestiaStatusDetailsRole] = "hestiaStatusDetails";
     names[DetailsRole] = "details";
 
     return names;

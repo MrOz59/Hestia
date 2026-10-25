@@ -147,8 +147,10 @@ public:
     bool
     recoverHestiaDisplay(bool force, QJsonObject* status);
 
+    // httpStatus, when given, is the host's HTTP status, or 0 when it never
+    // answered: a 401 says the host no longer accepts this client's pairing.
     bool
-    getHestiaClientPermissions(QJsonObject* permissions);
+    getHestiaClientPermissions(QJsonObject* permissions, int* httpStatus = nullptr);
 
     bool
     getHestiaDiagnostics(QJsonObject* diagnostics);

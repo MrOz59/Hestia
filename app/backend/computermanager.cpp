@@ -14,12 +14,43 @@
 #define SER_HOSTS "hosts"
 #define SER_HOSTS_BACKUP "hostsbackup"
 
+// Ask a paired Hermes host what Hestia-Android's status badge shows: this
+// client's permissions, then, when it may see them, the host's diagnostics
+// and display state. Every other host gets an invalid status and no badge.
+static HestiaHostStatus probeHestiaHostStatus(NvHTTP& http, NvComputer* computer,
+                                              const HestiaCapabilities& capabilities)
+{
+    if (!capabilities.supportsProtocolV1 || computer->pairState != NvComputer::PS_PAIRED) {
+        return HestiaHostStatus {};
+    }
+
+    HestiaHostProbe probe;
+    bool canViewStreams = true;
+    if (capabilities.features.permissionSystem) {
+        probe.permissionsOk = http.getHestiaClientPermissions(&probe.permissions,
+                                                              &probe.permissionsHttpStatus);
+        canViewStreams = probe.permissionsOk &&
+                probe.permissions.value("permissions").toObject().value("view_streams").toBool();
+    }
+    if (canViewStreams) {
+        probe.diagnosticsFetched = true;
+        probe.diagnosticsOk = http.getHestiaDiagnostics(&probe.diagnostics);
+        probe.displayFetched = true;
+        probe.displayOk = http.getHestiaDisplayStatus(&probe.display);
+    }
+    return HestiaHostStatus::evaluate(capabilities, probe);
+}
+
 class PcMonitorThread : public QThread
 {
     Q_OBJECT
 
 #define TRIES_BEFORE_OFFLINING 2
 #define POLLS_PER_APPLIST_FETCH 10
+// A Hermes host's status changes as sessions start and end, so it is asked
+// again this often (about every 30 seconds) rather than only when it comes
+// online.
+#define POLLS_PER_HESTIA_STATUS_FETCH 10
 
 public:
     PcMonitorThread(NvComputer* computer)
@@ -79,14 +110,20 @@ private:
         http.probeHestiaCapabilities(&capabilities);
         m_Computer->setHestiaCapabilities(capabilities);
 
-        // Refresh streaming readiness for paired Hermes hosts so the UI can warn
-        // about problems before the user starts a session.
-        HestiaPreflight preflight;
-        if (capabilities.supportsProtocolV1 &&
-                m_Computer->pairState == NvComputer::PS_PAIRED) {
-            http.probeHestiaDiagnostics(&preflight);
+        // So the UI can warn about problems before the user starts a session.
+        m_Computer->setHestiaStatus(probeHestiaHostStatus(http, m_Computer, capabilities));
+    }
+
+    bool refreshHestiaStatus(QNetworkAccessManager* nam)
+    {
+        HestiaCapabilities capabilities;
+        {
+            QReadLocker lock(&m_Computer->lock);
+            capabilities = m_Computer->hestiaCapabilities;
         }
-        m_Computer->setHestiaPreflight(preflight);
+
+        NvHTTP http(m_Computer, nam);
+        return m_Computer->setHestiaStatus(probeHestiaHostStatus(http, m_Computer, capabilities));
     }
 
     void run() override
@@ -108,6 +145,10 @@ private:
 
         // Always fetch the applist the first time
         int pollsSinceLastAppListFetch = POLLS_PER_APPLIST_FETCH;
+        // A monitor that finds the host already online, as after a stream,
+        // asks for its status on the first poll: a session has just ended and
+        // the display may have been left off.
+        int pollsSinceLastHestiaStatusFetch = POLLS_PER_HESTIA_STATUS_FETCH;
         while (!isInterruptionRequested()) {
             bool stateChanged = false;
             bool online = false;
@@ -139,7 +180,14 @@ private:
 
             if (online && !wasOnline) {
                 probeHestiaCapabilities(&nam);
+                pollsSinceLastHestiaStatusFetch = 0;
                 stateChanged = true;
+            }
+            else if (online && ++pollsSinceLastHestiaStatusFetch >= POLLS_PER_HESTIA_STATUS_FETCH) {
+                pollsSinceLastHestiaStatusFetch = 0;
+                if (refreshHestiaStatus(&nam)) {
+                    stateChanged = true;
+                }
             }
 
             // Grab the applist if it's empty or it's been long enough that we need to refresh
@@ -647,11 +695,7 @@ private:
                    http.probeHestiaCapabilities(&capabilities);
                    m_Computer->setHestiaCapabilities(capabilities);
 
-                   HestiaPreflight preflight;
-                   if (capabilities.supportsProtocolV1) {
-                       http.probeHestiaDiagnostics(&preflight);
-                   }
-                   m_Computer->setHestiaPreflight(preflight);
+                   m_Computer->setHestiaStatus(probeHestiaHostStatus(http, m_Computer, capabilities));
                }
 
                emit pairingCompleted(m_Computer, nullptr);

@@ -13,6 +13,7 @@ INCLUDEPATH += \
 SOURCES += \
     tst_clientlogic.cpp \
     ../app/backend/hestiacapabilities.cpp \
+    ../app/backend/hestiahoststatus.cpp \
     ../app/settings/presetconfiguration.cpp \
     ../app/streaming/hestianegotiation.cpp \
     ../app/streaming/protocol/hermesextensions.cpp \

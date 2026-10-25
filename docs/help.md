@@ -20,15 +20,16 @@ button and its IP address.
 
 ## Connection problems
 
-A Hermes host can usually say what is wrong itself. Open the PC's menu (right
-click, or the menu button on a gamepad) and look at:
+A Hermes host can usually say what is wrong itself. When it reports
+something that needs attention, its tile shows a warning or error badge;
+hover over it, or open **Hermes Status** in the PC's menu (right click, or the
+menu button on a gamepad), for what the host said. The menu also has:
 
 - **Hermes Diagnostics**: the host's readiness checks, which encoder it uses,
   and its live sessions.
 - **Hermes Permissions**: what this client is allowed to do. A client missing
   the launch or input permission connects but cannot start apps or control
-  them; grant it on the PIN page of the Hermes web UI, in that client's
-  permissions.
+  them; grant it in the Hermes web UI under PIN → Device Management.
 - **Hermes Display Status** and **Recover Physical Monitor**: when a stream
   left the host's monitor switched off.
 

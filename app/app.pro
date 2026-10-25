@@ -214,6 +214,7 @@ SOURCES += \
     streaming/bandwidth.cpp \
     streaming/streamutils.cpp \
     backend/autoupdatechecker.cpp \
+    backend/hestiahoststatus.cpp \
     path.cpp \
     settings/mappingmanager.cpp \
     gui/sdlgamepadkeynavigation.cpp \
@@ -278,6 +279,7 @@ HEADERS += \
     streaming/bandwidth.h \
     streaming/streamutils.h \
     backend/autoupdatechecker.h \
+    backend/hestiahoststatus.h \
     backend/updatechannel.h \
     path.h \
     settings/mappingmanager.h \

@@ -8,6 +8,9 @@ on:
     branches:
       - master
       - feature/pyrowave-codec
+    paths-ignore:
+      - 'tests/test_pyrowave_roundtrip.cpp'
+      - '.github/workflows/pyrowave-roundtrip.yml'
     tags:
       - 'v*'
   pull_request:

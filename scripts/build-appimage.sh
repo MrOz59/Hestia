@@ -62,9 +62,11 @@ popd
 # PyroWave is optional for local AppImages; release CI supplies its SDK.
 # linuxdeploy follows DT_NEEDED with LD_LIBRARY_PATH and bundles the runtime.
 if pkg-config --exists pyrowave-shared; then
-  mkdir -p "$DEPLOY_FOLDER/usr/share/licenses/hestia"
-  cp -R "$SOURCE_ROOT/build/pyrowave-sdk/install/share/licenses/pyrowave" \
-    "$DEPLOY_FOLDER/usr/share/licenses/hestia/"
+  license_dir="$(pkg-config --variable=prefix pyrowave-shared)/share/licenses/pyrowave"
+  if [ -d "$license_dir" ]; then
+    mkdir -p "$DEPLOY_FOLDER/usr/share/licenses/hestia"
+    cp -R "$license_dir" "$DEPLOY_FOLDER/usr/share/licenses/hestia/"
+  fi
 fi
 
 export QML_SOURCES_PATHS=$SOURCE_ROOT/app/gui

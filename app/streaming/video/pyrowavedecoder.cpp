@@ -63,6 +63,7 @@ bool PyroWaveVideoDecoder::initialize(PDECODER_PARAMETERS params)
 {
     if ((params->videoFormat & VIDEO_FORMAT_MASK_PYROWAVE) == 0 ||
             params->width <= 0 || params->height <= 0 ||
+            params->width > 8192 || params->height > 8192 ||
             (params->width & 1) != 0 || (params->height & 1) != 0 ||
             m_FrameLock == nullptr) {
         return false;

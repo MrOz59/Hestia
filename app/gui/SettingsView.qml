@@ -1157,6 +1157,70 @@ Flickable {
 
 
                 CheckBox {
+                    id: microphoneCheck
+                    width: parent.width
+                    text: qsTr("Stream my microphone to the host")
+                    font.pointSize: 12
+                    checked: StreamingPreferences.enableMicrophone
+                    onCheckedChanged: {
+                        StreamingPreferences.enableMicrophone = checked
+                    }
+
+                    ToolTip.delay: 1000
+                    ToolTip.timeout: 10000
+                    ToolTip.visible: hovered
+                    ToolTip.text: qsTr("Sends this computer's microphone to hosts that accept it: Hermes with \"Stream the client's microphone\" turned on, where it reaches independent sessions, or Apollo with microphone passthrough. Other hosts stream as usual without it.")
+                }
+
+                Label {
+                    width: parent.width
+                    text: qsTr("Microphone")
+                    font.pointSize: 12
+                    wrapMode: Text.Wrap
+                    visible: microphoneCheck.checked
+                }
+
+                AutoResizingComboBox {
+                    id: microphoneComboBox
+                    visible: microphoneCheck.checked
+                    textRole: "text"
+                    model: ListModel {
+                        id: microphoneListModel
+                    }
+
+                    // The devices are listed when the page opens; one picked
+                    // earlier that is gone now stays listed, so the choice
+                    // isn't silently replaced.
+                    Component.onCompleted: {
+                        var saved = StreamingPreferences.microphoneDevice
+                        microphoneListModel.append({ "text": qsTr("System default"), "val": "" })
+                        var devices = SystemProperties.getMicrophoneDevices()
+                        var found = saved === ""
+                        for (var i = 0; i < devices.length; i++) {
+                            microphoneListModel.append({ "text": devices[i], "val": devices[i] })
+                            if (devices[i] === saved) {
+                                found = true
+                            }
+                        }
+                        if (!found) {
+                            microphoneListModel.append({ "text": qsTr("%1 (not connected)").arg(saved), "val": saved })
+                        }
+
+                        currentIndex = 0
+                        for (var j = 0; j < microphoneListModel.count; j++) {
+                            if (microphoneListModel.get(j).val === saved) {
+                                currentIndex = j
+                                break
+                            }
+                        }
+                    }
+
+                    onActivated: {
+                        StreamingPreferences.microphoneDevice = microphoneListModel.get(currentIndex).val
+                    }
+                }
+
+                CheckBox {
                     id: audioPcCheck
                     width: parent.width
                     text: qsTr("Mute host PC speakers while streaming")
@@ -1685,6 +1749,23 @@ Flickable {
                         StreamingPreferences.reverseScrollDirection = checked
                     }
                 }
+
+                CheckBox {
+                    id: mouseWiggleCheck
+                    hoverEnabled: true
+                    width: parent.width
+                    text: qsTr("Wiggle the mouse on connect")
+                    font.pointSize: 12
+                    checked: StreamingPreferences.mouseWiggleOnConnect
+                    onCheckedChanged: {
+                        StreamingPreferences.mouseWiggleOnConnect = checked
+                    }
+
+                    ToolTip.delay: 1000
+                    ToolTip.timeout: 10000
+                    ToolTip.visible: hovered
+                    ToolTip.text: qsTr("Moves the mouse by one pixel and back when the stream starts, to wake the host's display. Turn it off to keep the cursor hidden in Gamescope sessions on hosts that don't already ignore it.")
+                }
             }
         }
 
@@ -2145,6 +2226,22 @@ Flickable {
                     ToolTip.text: qsTr("Display real-time stream performance information while streaming.") + "\n\n" +
                                   qsTr("You can toggle it at any time while streaming using Ctrl+Alt+Shift+S or Select+L1+R1+X.") + "\n\n" +
                                   qsTr("The performance overlay is not supported on Steam Link or Raspberry Pi.")
+                }
+
+                CheckBox {
+                    id: showLatencySummaryCheck
+                    width: parent.width
+                    text: qsTr("Show a latency summary after streaming")
+                    font.pointSize: 12
+                    checked: StreamingPreferences.showLatencySummary
+                    onCheckedChanged: {
+                        StreamingPreferences.showLatencySummary = checked
+                    }
+
+                    ToolTip.delay: 1000
+                    ToolTip.timeout: 5000
+                    ToolTip.visible: hovered
+                    ToolTip.text: qsTr("When a stream ends, shows its average decode, render and host processing time per frame, the network round trip and the codec.")
                 }
             }
         }

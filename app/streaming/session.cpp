@@ -17,6 +17,7 @@
 
 #include <Limelight.h>
 #include "SDL_compat.h"
+#include "streaming/audio/microphone/microphonecapture.h"
 #include "utils.h"
 
 #ifdef HAVE_FFMPEG
@@ -950,6 +951,71 @@ void Session::applyHestiaCodecLimits()
     }
 }
 
+void Session::startMicrophone()
+{
+    if (!m_Preferences->enableMicrophone) {
+        return;
+    }
+
+    m_Microphone = std::make_unique<MicrophoneCapture>(m_Preferences->microphoneDevice);
+    switch (m_Microphone->start()) {
+    case MicrophoneCapture::StartResult::Started:
+        return;
+    case MicrophoneCapture::StartResult::NotNegotiated:
+        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+                    "Microphone: the host did not negotiate a microphone stream");
+        showTransientNotice(tr("Microphone not sent: the host didn't accept it.\nOn Hermes, turn on \"Stream the client's microphone\"."));
+        break;
+    case MicrophoneCapture::StartResult::DeviceFailed:
+        showTransientNotice(tr("Microphone not sent: the input device couldn't be opened."));
+        break;
+    case MicrophoneCapture::StartResult::EncoderFailed:
+        showTransientNotice(tr("Microphone not sent: the audio encoder couldn't start."));
+        break;
+    }
+    m_Microphone.reset();
+}
+
+void Session::stopMicrophone()
+{
+    if (m_Microphone) {
+        m_Microphone->stop();
+        m_Microphone.reset();
+    }
+}
+
+void Session::showTransientNotice(const QString& text)
+{
+    // Notices that arrive together are shown together.
+    if (m_TransientNoticeUntilMs != 0 && !m_TransientNoticeText.isEmpty()) {
+        m_TransientNoticeText += "\n\n" + text.toUtf8();
+    }
+    else {
+        m_TransientNoticeText = text.toUtf8();
+    }
+    m_OverlayManager.updateOverlayText(Overlay::OverlayStatusUpdate, m_TransientNoticeText.constData());
+    m_OverlayManager.setOverlayState(Overlay::OverlayStatusUpdate, true);
+    m_TransientNoticeUntilMs = SDL_GetTicks() + 6000;
+    if (m_TransientNoticeUntilMs == 0) {
+        m_TransientNoticeUntilMs = 1;
+    }
+}
+
+void Session::expireTransientNotice()
+{
+    if (m_TransientNoticeUntilMs == 0 || !SDL_TICKS_PASSED(SDL_GetTicks(), m_TransientNoticeUntilMs)) {
+        return;
+    }
+    m_TransientNoticeUntilMs = 0;
+
+    // Leave the overlay alone if something else, such as a connection
+    // warning, has taken it over since.
+    const char* current = m_OverlayManager.getOverlayText(Overlay::OverlayStatusUpdate);
+    if (current != nullptr && qstrcmp(current, m_TransientNoticeText.constData()) == 0) {
+        m_OverlayManager.setOverlayState(Overlay::OverlayStatusUpdate, false);
+    }
+}
+
 void Session::pollHestiaClipboardSync()
 {
     if (!m_Preferences->hestiaClipboardSync ||
@@ -1082,6 +1148,11 @@ bool Session::initialize(QQuickWindow* qtWindow)
         m_StreamConfig.encryptionFlags = ENCFLG_AUDIO;
     }
 #endif
+
+    // Ask the host for a microphone stream. Hosts that don't offer one
+    // (anything but Hermes or Apollo with it turned on) leave it out of the
+    // handshake, and the stream goes ahead without it.
+    m_StreamConfig.enableMic = m_Preferences->enableMicrophone;
 
     SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
                 "Video bitrate: %d kbps",
@@ -2039,10 +2110,21 @@ bool Session::startConnectionAsync()
             if (!m_HostProtocol->prepareSession(
                         m_HostSessionRequest,
                         &m_HestiaSessionId,
-                        &m_NegotiatedExtensions) &&
-                    m_Computer->hestiaCapabilities.features.multiUserSessions) {
-                emit displayLaunchError(tr("The host could not reserve an independent streaming session. Check the Hermes-KMS driver and isolated-session setup."));
-                return false;
+                        &m_NegotiatedExtensions)) {
+                if (m_Computer->hestiaCapabilities.features.multiUserSessions) {
+                    emit displayLaunchError(tr("The host could not reserve an independent streaming session. Check the Hermes-KMS driver and isolated-session setup."));
+                    return false;
+                }
+
+                // The stream still starts, as a plain one, but without the
+                // virtual display and settings asked for; say why once it is up,
+                // as Hestia-Android does.
+                const QString reason = m_HostProtocol->lastPrepareFailure();
+                if (!reason.isEmpty()) {
+                    m_PendingNotices.append(
+                            tr("Hermes didn't prepare this session (%1).\nStreaming with the host's own display settings.")
+                                    .arg(reason));
+                }
             }
 
             // Only the host's answer turns an extension on. Announcing it is a
@@ -2117,6 +2199,8 @@ bool Session::startConnectionAsync()
                                                                          m_StreamConfig.fps,
                                                                          false);
     }
+
+    m_ClientTransport->setMouseWiggleOnConnect(m_Preferences->mouseWiggleOnConnect);
 
     const ClientTransport::StartResult transportStart =
             m_ClientTransport->start();
@@ -2375,6 +2459,13 @@ void Session::exec()
     // Toggle the stats overlay if requested by the user
     m_OverlayManager.setOverlayState(Overlay::OverlayDebug, m_Preferences->showPerformanceOverlay);
 
+    for (const QString& notice : std::as_const(m_PendingNotices)) {
+        showTransientNotice(notice);
+    }
+    m_PendingNotices.clear();
+
+    startMicrophone();
+
     // Switch to async logging mode when we enter the SDL loop
     StreamUtils::enterAsyncLoggingMode();
 
@@ -2395,6 +2486,7 @@ void Session::exec()
         if (!SDL_WaitEventTimeout(&event, 1000)) {
             presence.runCallbacks();
             pollHestiaClipboardSync();
+            expireTransientNotice();
             continue;
         }
 #else
@@ -2412,11 +2504,13 @@ void Session::exec()
 #endif
             presence.runCallbacks();
             pollHestiaClipboardSync();
+            expireTransientNotice();
             continue;
         }
 #endif
 
         pollHestiaClipboardSync();
+        expireTransientNotice();
         switch (event.type) {
         case SDL_QUIT:
             SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
@@ -2734,6 +2828,9 @@ DispatchDeferredCleanup:
     // Switch back to synchronous logging mode
     StreamUtils::exitAsyncLoggingMode();
 
+    // Before the connection stops and takes the microphone stream with it.
+    stopMicrophone();
+
     // Uncapture the mouse and hide the window immediately,
     // so we can return to the Qt GUI ASAP.
     m_InputHandler->setCaptureActive(false);
@@ -2759,6 +2856,13 @@ DispatchDeferredCleanup:
     delete m_VideoDecoder;
     m_VideoDecoder = nullptr;
     SDL_UnlockMutex(m_DecoderLock);
+
+    // Each decoder publishes its aggregate stats as it is destroyed, so this
+    // covers the stream since the decoder was last recreated (normally all of it).
+    if (m_Preferences->showLatencySummary) {
+        m_LatencySummary = m_SessionTelemetry->latencySummary();
+        emit latencySummaryChanged();
+    }
 
     // Propagate state changes from the SDL window back to the Qt window
     //

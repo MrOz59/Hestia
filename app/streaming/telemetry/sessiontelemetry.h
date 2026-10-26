@@ -144,6 +144,13 @@ public:
             const AudioWindowReport& report) = 0;
     virtual void publishAudioSessionSummary(
             const AudioSessionSummary& summary) = 0;
+
+    // The latency report for the last video session summary published, or
+    // empty when there is none (see Diagnostics::latencySummary()).
+    virtual QString latencySummary() const
+    {
+        return QString();
+    }
 };
 
 class NullSessionTelemetry final : public ISessionTelemetry

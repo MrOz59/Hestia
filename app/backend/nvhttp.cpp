@@ -345,8 +345,16 @@ bool NvHTTP::probeHestiaDiagnostics(HestiaPreflight* preflight)
 
 bool NvHTTP::prepareHestiaSession(const QJsonObject& sessionRequest,
                                   QString* sessionId,
-                                  QMap<QString, uint32_t>* negotiatedExtensions)
+                                  QMap<QString, uint32_t>* negotiatedExtensions,
+                                  QString* failureReason)
 {
+    const auto fail = [failureReason](const QString& reason) {
+        if (failureReason != nullptr) {
+            *failureReason = reason;
+        }
+        return false;
+    };
+
     if (m_ServerCert.isNull()) {
         qDebug() << "[Hestia] Skipping session prepare; host is not paired";
         return false;
@@ -391,15 +399,22 @@ bool NvHTTP::prepareHestiaSession(const QJsonObject& sessionRequest,
         reply->abort();
         qDebug() << "[Hestia] Session prepare unavailable; using standard Moonlight mode (request timed out)";
         delete reply;
-        return false;
+        return fail(tr("the request timed out"));
     }
 
     const int statusCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
     if (reply->error() != QNetworkReply::NoError || statusCode < 200 || statusCode >= 300) {
         qDebug() << "[Hestia] Session prepare unavailable; using standard Moonlight mode"
                  << "(status" << statusCode << ", network error" << reply->error() << ")";
+        // A Hermes error carries its reason: {"ok":false,"error":{"code","message"}}.
+        const QString hostMessage =
+                QJsonDocument::fromJson(reply->readAll()).object()
+                        .value("error").toObject().value("message").toString();
         delete reply;
-        return false;
+        if (!hostMessage.isEmpty()) {
+            return fail(hostMessage);
+        }
+        return fail(statusCode != 0 ? tr("HTTP %1").arg(statusCode) : tr("no response"));
     }
 
     QJsonParseError parseError;
@@ -407,7 +422,7 @@ bool NvHTTP::prepareHestiaSession(const QJsonObject& sessionRequest,
     delete reply;
     if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
         qDebug() << "[Hestia] Session prepare unavailable; using standard Moonlight mode (malformed response)";
-        return false;
+        return fail(tr("the host's answer was malformed"));
     }
 
     const QJsonObject response = document.object();
@@ -426,13 +441,13 @@ bool NvHTTP::prepareHestiaSession(const QJsonObject& sessionRequest,
             !responseVirtualDisplay.value("kscreen_enabled").isBool() ||
             !response.value("warnings").isArray()) {
         qDebug() << "[Hestia] Session prepare unavailable; using standard Moonlight mode (invalid response)";
-        return false;
+        return fail(tr("the host's answer was incomplete"));
     }
 
     for (const QJsonValue& warning : warnings) {
         if (!warning.isString()) {
             qDebug() << "[Hestia] Session prepare unavailable; using standard Moonlight mode (invalid warnings)";
-            return false;
+            return fail(tr("the host's answer was incomplete"));
         }
     }
 
@@ -613,9 +628,12 @@ bool NvHTTP::getHestiaServerCommands(QJsonArray* commands)
     return true;
 }
 
-bool NvHTTP::getHestiaClientPermissions(QJsonObject* permissions)
+bool NvHTTP::getHestiaClientPermissions(QJsonObject* permissions, int* httpStatus)
 {
     Q_ASSERT(permissions != nullptr);
+    if (httpStatus != nullptr) {
+        *httpStatus = 0;
+    }
     if (m_ServerCert.isNull()) {
         return false;
     }
@@ -638,6 +656,9 @@ bool NvHTTP::getHestiaClientPermissions(QJsonObject* permissions)
     const bool success = reply->isFinished() && reply->error() == QNetworkReply::NoError &&
             reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() >= 200 &&
             reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() < 300;
+    if (httpStatus != nullptr && reply->isFinished()) {
+        *httpStatus = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+    }
     QJsonParseError error;
     const QJsonDocument response = QJsonDocument::fromJson(reply->readAll(), &error);
     delete reply;
@@ -688,6 +709,28 @@ bool NvHTTP::getHestiaDiagnostics(QJsonObject* diagnostics)
 
     *diagnostics = response.object();
     return true;
+}
+
+HestiaHostStatus NvHTTP::probeHestiaHostStatus(const HestiaCapabilities& capabilities)
+{
+    if (!capabilities.supportsProtocolV1) {
+        return HestiaHostStatus {};
+    }
+
+    HestiaHostProbe probe;
+    bool canViewStreams = true;
+    if (capabilities.features.permissionSystem) {
+        probe.permissionsOk = getHestiaClientPermissions(&probe.permissions, &probe.permissionsHttpStatus);
+        canViewStreams = probe.permissionsOk &&
+                probe.permissions.value("permissions").toObject().value("view_streams").toBool();
+    }
+    if (canViewStreams) {
+        probe.diagnosticsFetched = true;
+        probe.diagnosticsOk = getHestiaDiagnostics(&probe.diagnostics);
+        probe.displayFetched = true;
+        probe.displayOk = getHestiaDisplayStatus(&probe.display);
+    }
+    return HestiaHostStatus::evaluate(capabilities, probe);
 }
 
 bool NvHTTP::getHestiaClipboard(QString* text)

@@ -41,10 +41,17 @@ bool GameStreamHostProtocol::prepareSession(const SessionRequest& request,
                                             QMap<QString, uint32_t>* negotiatedExtensions)
 {
     NvHTTP http(m_Computer);
+    m_LastPrepareFailure.clear();
     return http.prepareHestiaSession(
             toHestiaPreparePayload(request),
             sessionId,
-            negotiatedExtensions);
+            negotiatedExtensions,
+            &m_LastPrepareFailure);
+}
+
+QString GameStreamHostProtocol::lastPrepareFailure() const
+{
+    return m_LastPrepareFailure;
 }
 
 QString GameStreamHostProtocol::launchSession(const LaunchRequest& request)

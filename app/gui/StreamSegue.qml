@@ -71,6 +71,15 @@ Item {
         // Pop the StreamSegue off the stack if this is a GUI-based app launch
         if (!quitAfter) {
             stackView.pop()
+
+            // The latency report, like Hestia-Android's after-stream message.
+            // It belongs to the page underneath now, since this one is gone.
+            if (session.latencySummary) {
+                var toast = Qt.createQmlObject('import QtQuick.Controls 2.2; ToolTip {}', stackView, '')
+                toast.timeout = 8000
+                toast.text = session.latencySummary
+                toast.visible = true
+            }
         }
 
         if (quitAfter && !streamSegueErrorDialog.text) {

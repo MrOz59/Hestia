@@ -3,6 +3,7 @@
 #include "nvhttp.h"
 #include "nvaddress.h"
 #include "hestiacapabilities.h"
+#include "hestiahoststatus.h"
 
 #include <QThread>
 #include <QReadWriteLock>
@@ -105,14 +106,13 @@ public:
 
     void setHestiaCapabilities(const HestiaCapabilities& capabilities);
 
-    // Streaming-readiness preflight (from the Hermes diagnostics endpoint).
-    // Refreshed alongside capabilities for paired hosts; advisory only.
-    HestiaPreflight hestiaPreflight;
+    // What the Hestia API says about a paired Hermes host: permissions,
+    // readiness checks, sessions and display state. Refreshed by the poller;
+    // invalid for every other host. Advisory: it never blocks a connection.
+    HestiaHostStatus hestiaStatus;
 
-    void setHestiaPreflight(const HestiaPreflight& preflight);
-
-    // True when the host reported a failing or advisory readiness check.
-    bool hasHestiaReadinessWarning() const;
+    // Returns whether the status changed.
+    bool setHestiaStatus(const HestiaHostStatus& status);
 
     // Persisted traits
     NvAddress localAddress;

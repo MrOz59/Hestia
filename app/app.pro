@@ -209,11 +209,13 @@ SOURCES += \
     streaming/video/receiver/gamestreamvideoreceiver.cpp \
     streaming/session.cpp \
     streaming/audio/renderers/sdlaud.cpp \
+    streaming/audio/microphone/microphonecapture.cpp \
     gui/computermodel.cpp \
     gui/appmodel.cpp \
     streaming/bandwidth.cpp \
     streaming/streamutils.cpp \
     backend/autoupdatechecker.cpp \
+    backend/hestiahoststatus.cpp \
     path.cpp \
     settings/mappingmanager.cpp \
     gui/sdlgamepadkeynavigation.cpp \
@@ -272,12 +274,15 @@ HEADERS += \
     streaming/session.h \
     streaming/audio/renderers/renderer.h \
     streaming/audio/renderers/sdl.h \
+    streaming/audio/microphone/microphonecapture.h \
     gui/computermodel.h \
     gui/appmodel.h \
     streaming/video/decoder.h \
     streaming/bandwidth.h \
     streaming/streamutils.h \
     backend/autoupdatechecker.h \
+    backend/hestiahoststatus.h \
+    backend/updatechannel.h \
     path.h \
     settings/mappingmanager.h \
     gui/sdlgamepadkeynavigation.h \
@@ -624,5 +629,12 @@ macx {
     }
 }
 
+# version.txt is the release number. CI builds other than a tagged release
+# set HESTIA_BUILD_VERSION to it plus the commit (0.1.0+abc1234), the way
+# Hermes stamps its nightlies, so a report from a nightly names the commit it
+# came from. VERSION stays the plain number: Windows resources and the macOS
+# Info.plist only take numeric versions.
 VERSION = "$$cat(version.txt)"
-DEFINES += VERSION_STR=\\\"$$cat(version.txt)\\\"
+HESTIA_BUILD_VERSION = $$(HESTIA_BUILD_VERSION)
+isEmpty(HESTIA_BUILD_VERSION): HESTIA_BUILD_VERSION = $$cat(version.txt)
+DEFINES += VERSION_STR=\\\"$$HESTIA_BUILD_VERSION\\\"

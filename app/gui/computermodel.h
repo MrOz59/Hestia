@@ -22,8 +22,8 @@ class ComputerModel : public QAbstractListModel
         HestiaServerCommandsRole,
         HestiaPermissionSystemRole,
         HestiaClipboardSyncRole,
-        HestiaReadinessWarningRole,
-        HestiaReadinessDetailsRole,
+        HestiaStatusLevelRole,
+        HestiaStatusDetailsRole,
         DetailsRole
     };
 
@@ -60,6 +60,15 @@ public:
     Q_INVOKABLE QVariantMap getHestiaClientPermissions(int computerIndex);
 
     Q_INVOKABLE QVariantMap getHestiaDiagnostics(int computerIndex);
+
+    // Asks a Hermes host for its status now, updates the tile with it and
+    // returns what the Hermes Status dialog shows: valid, details,
+    // recoveryOffered, serverVersion and protocol.
+    Q_INVOKABLE QVariantMap refreshHestiaStatus(int computerIndex);
+
+    // The host's web UI (Sunshine, Apollo, Hermes), or empty for a host
+    // without one.
+    Q_INVOKABLE QString getHostWebUiUrl(int computerIndex);
 
     Q_INVOKABLE bool pasteHestiaClipboard(int computerIndex);
 

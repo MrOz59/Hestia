@@ -12,6 +12,9 @@ on:
   pull_request:
     branches:
       - master
+      # Post-release work lands on dev, so changes headed there get the same
+      # signal. Only master publishes the nightly.
+      - dev
   # Manual runs can opt into the heavier / non-focus targets (AppImage
   # packaging, Steam Link, Windows, macOS) that aren't part of the default
   # push/PR signal.
@@ -35,17 +38,50 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # ci_version is the short commit the artifact names carry. build_version is
+  # the version the client reports and the packages are named after: the plain
+  # app/version.txt number for a v* tag, and that number plus the commit as
+  # SemVer build metadata (0.1.0+abc1234) for every other build, the way Hermes
+  # stamps its nightlies. A nightly then says which commit it came from, and the
+  # update checker can tell one nightly from the next.
+  #
+  # `+` is the separator every package format here accepts (Arch pkgver forbids
+  # `-`), and as build metadata it sorts equal to the plain version instead of
+  # below it: a nightly is 0.1.0 plus commits, not a 0.1.0 pre-release.
   setup:
     runs-on: ubuntu-latest
     outputs:
       ci_version: ${{ steps.set-ci-version.outputs.ci_version }}
+      version: ${{ steps.set-ci-version.outputs.version }}
+      build_version: ${{ steps.set-ci-version.outputs.build_version }}
     steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 1
+
       - name: Set CI version
         id: set-ci-version
         shell: bash
         run: |
           CI_VERSION=`echo ${GITHUB_SHA} | cut -c1-6`
+          version="$(tr -d '[:space:]' < app/version.txt)"
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            # The update checker compares the release tag with the version
+            # the client reports, so a tag that disagrees with version.txt
+            # would tell that release's own users to update, forever.
+            if [[ "${GITHUB_REF_NAME}" != "v${version}" ]]; then
+              echo "::error::Tag ${GITHUB_REF_NAME} does not match app/version.txt (${version}); bump version.txt in the tagged commit"
+              exit 1
+            fi
+            build_version="${version}"
+          else
+            build_version="${version}+${GITHUB_SHA:0:7}"
+          fi
           echo "ci_version=${CI_VERSION}" >> "${GITHUB_OUTPUT}"
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+          echo "build_version=${build_version}" >> "${GITHUB_OUTPUT}"
+          echo "Build version: ${build_version}"
 
   # Primary signal: the client builds on Linux. Always runs.
   build-linux:
@@ -53,6 +89,7 @@ jobs:
     uses: ./.github/workflows/build-linux.yml
     with:
       ci_version: ${{ needs.setup.outputs.ci_version }}
+      build_version: ${{ needs.setup.outputs.build_version }}
 
   # Distributable package for the focus platform (Arch/CachyOS). Runs by default.
   build-arch:
@@ -60,6 +97,7 @@ jobs:
     uses: ./.github/workflows/build-arch.yml
     with:
       ci_version: ${{ needs.setup.outputs.ci_version }}
+      build_version: ${{ needs.setup.outputs.build_version }}
 
   # Portable AppImage. Runs by default (push/PR). It builds SDL/FFmpeg/libplacebo
   # from source, which is slow (~30-50 min) and more prone to breaking on a
@@ -76,6 +114,7 @@ jobs:
     uses: ./.github/workflows/build-appimage.yml
     with:
       ci_version: ${{ needs.setup.outputs.ci_version }}
+      build_version: ${{ needs.setup.outputs.build_version }}
 
   # Opt-in targets. These only run on a manual dispatch with the matching input
   # enabled, so a red Windows/macOS build never blocks normal CI.
@@ -86,6 +125,7 @@ jobs:
     uses: ./.github/workflows/build-steamlink.yml
     with:
       ci_version: ${{ needs.setup.outputs.ci_version }}
+      build_version: ${{ needs.setup.outputs.build_version }}
 
   build-windows-macos:
     needs: setup
@@ -93,6 +133,7 @@ jobs:
     uses: ./.github/workflows/build-win-mac.yml
     with:
       ci_version: ${{ needs.setup.outputs.ci_version }}
+      build_version: ${{ needs.setup.outputs.build_version }}
 
   # ===========================================
   # Tagged release (on a v* tag)
@@ -133,8 +174,8 @@ jobs:
   nightly:
     # Wait for the AppImage so it can be bundled when it succeeds, but always()
     # ensures a failed/skipped AppImage still publishes the rest of the nightly.
-    if: ${{ always() && github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.build-linux.result == 'success' && needs.build-arch.result == 'success' }}
-    needs: [build-linux, build-arch, build-appimage]
+    if: ${{ always() && github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.setup.result == 'success' && needs.build-linux.result == 'success' && needs.build-arch.result == 'success' }}
+    needs: [setup, build-linux, build-arch, build-appimage]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -143,10 +184,6 @@ jobs:
         uses: actions/checkout@v5
         with:
           fetch-depth: 1
-
-      - name: Read version
-        id: version
-        run: echo "version=$(cat app/version.txt)" >> "$GITHUB_OUTPUT"
 
       - name: Download all build artifacts
         uses: actions/download-artifact@v6
@@ -175,11 +212,13 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: nightly
-          name: "Hestia nightly (v${{ steps.version.outputs.version }})"
+          # The client's update checker reads the build version, commit
+          # included, from this name: keep it in the name.
+          name: "Hestia nightly (v${{ needs.setup.outputs.build_version }})"
           body: |
             Rolling nightly build of the Hestia client from the `master` branch.
 
-            - Version: `v${{ steps.version.outputs.version }}`
+            - Version: `v${{ needs.setup.outputs.build_version }}` (built on `v${{ needs.setup.outputs.version }}`)
             - Commit: ${{ github.sha }}
 
             > Artifacts are rebuilt on every push to `master` and may be

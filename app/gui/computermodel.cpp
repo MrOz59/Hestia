@@ -1,6 +1,7 @@
 #include "computermodel.h"
 
 #include <QJsonArray>
+#include <QUrl>
 #include <QThreadPool>
 #include <QClipboard>
 #include <QGuiApplication>
@@ -59,25 +60,27 @@ QVariant ComputerModel::data(const QModelIndex& index, int role) const
     case HestiaClipboardSyncRole:
         return computer->hestiaCapabilities.supportsProtocolV1 &&
                computer->hestiaCapabilities.features.clipboardSync;
-    case HestiaReadinessWarningRole:
-        return computer->hestiaCapabilities.supportsProtocolV1 &&
-               computer->hestiaPreflight.valid &&
-               (!computer->hestiaPreflight.ready || !computer->hestiaPreflight.problems().isEmpty());
-    case HestiaReadinessDetailsRole: {
-        // A newline-separated list of the non-ok check messages, for a tooltip.
-        if (!computer->hestiaCapabilities.supportsProtocolV1 ||
-                !computer->hestiaPreflight.valid) {
+    case HestiaStatusLevelRole:
+        // "" for a host without a status (not Hermes, or not paired), else
+        // "ok", "info", "warning" or "error"; the PC tile badges the last two.
+        if (!computer->hestiaStatus.valid) {
             return QString();
         }
-        QStringList lines;
-        for (const auto& problem : computer->hestiaPreflight.problems()) {
-            lines.append(problem.message);
+        switch (computer->hestiaStatus.level()) {
+        case HestiaHostFinding::Level::Error:
+            return QStringLiteral("error");
+        case HestiaHostFinding::Level::Warning:
+            return QStringLiteral("warning");
+        case HestiaHostFinding::Level::Info:
+            return QStringLiteral("info");
+        case HestiaHostFinding::Level::Ok:
+        default:
+            return QStringLiteral("ok");
         }
-        if (lines.isEmpty() && !computer->hestiaPreflight.ready) {
-            lines.append(tr("Hermes reports that this host is not ready to stream."));
-        }
-        return lines.join('\n');
-    }
+    case HestiaStatusDetailsRole:
+        // One line per finding, most severe first, for the tooltip and the
+        // PC menu's Hermes Status entry.
+        return computer->hestiaStatus.valid ? computer->hestiaStatus.details() : QString();
     case DetailsRole: {
         QString state, pairState;
 
@@ -150,8 +153,8 @@ QHash<int, QByteArray> ComputerModel::roleNames() const
     names[HestiaServerCommandsRole] = "hestiaServerCommands";
     names[HestiaPermissionSystemRole] = "hestiaPermissionSystem";
     names[HestiaClipboardSyncRole] = "hestiaClipboardSync";
-    names[HestiaReadinessWarningRole] = "hestiaReadinessWarning";
-    names[HestiaReadinessDetailsRole] = "hestiaReadinessDetails";
+    names[HestiaStatusLevelRole] = "hestiaStatusLevel";
+    names[HestiaStatusDetailsRole] = "hestiaStatusDetails";
     names[DetailsRole] = "details";
 
     return names;
@@ -262,6 +265,58 @@ QVariantMap ComputerModel::getHestiaClientPermissions(int computerIndex)
     NvHTTP http(computer);
     QJsonObject permissions;
     return http.getHestiaClientPermissions(&permissions) ? permissions.toVariantMap() : QVariantMap{};
+}
+
+QVariantMap ComputerModel::refreshHestiaStatus(int computerIndex)
+{
+    if (computerIndex < 0 || computerIndex >= m_Computers.count()) {
+        return {};
+    }
+    NvComputer* computer = m_Computers[computerIndex];
+
+    HestiaCapabilities capabilities;
+    bool paired;
+    {
+        QReadLocker lock(&computer->lock);
+        capabilities = computer->hestiaCapabilities;
+        paired = computer->pairState == NvComputer::PS_PAIRED;
+    }
+
+    NvHTTP http(computer);
+    const HestiaHostStatus status = paired ? http.probeHestiaHostStatus(capabilities) : HestiaHostStatus {};
+    if (computer->setHestiaStatus(status)) {
+        emit dataChanged(createIndex(computerIndex, 0), createIndex(computerIndex, 0));
+    }
+
+    return {
+        {"valid", status.valid},
+        {"details", status.valid ? status.details() : QString()},
+        {"recoveryOffered", status.displayRecoveryOffered},
+        {"serverVersion", capabilities.serverVersion},
+        {"protocol", capabilities.hestiaProtocol},
+    };
+}
+
+QString ComputerModel::getHostWebUiUrl(int computerIndex)
+{
+    if (computerIndex < 0 || computerIndex >= m_Computers.count()) {
+        return QString();
+    }
+    NvComputer* computer = m_Computers[computerIndex];
+
+    QReadLocker lock(&computer->lock);
+    // GeForce Experience has no web UI. Sunshine and its forks serve theirs
+    // one port above the GameStream HTTP port, 47990 by default, where Hermes
+    // also serves the Hestia API.
+    if (computer->isNvidiaServerSoftware || computer->activeAddress.isNull()) {
+        return QString();
+    }
+    QUrl url;
+    url.setScheme(QStringLiteral("https"));
+    url.setHost(computer->activeAddress.address());
+    url.setPort(computer->activeAddress.port() + 1);
+    url.setPath(QStringLiteral("/"));
+    return url.toString();
 }
 
 QVariantMap ComputerModel::getHestiaDiagnostics(int computerIndex)

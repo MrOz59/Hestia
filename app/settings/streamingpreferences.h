@@ -194,6 +194,8 @@ public:
     Q_PROPERTY(bool enableVsync MEMBER enableVsync NOTIFY enableVsyncChanged)
     Q_PROPERTY(bool gameOptimizations MEMBER gameOptimizations NOTIFY gameOptimizationsChanged)
     Q_PROPERTY(bool playAudioOnHost MEMBER playAudioOnHost NOTIFY playAudioOnHostChanged)
+    Q_PROPERTY(bool enableMicrophone MEMBER enableMicrophone NOTIFY microphoneChanged)
+    Q_PROPERTY(QString microphoneDevice MEMBER microphoneDevice NOTIFY microphoneChanged)
     Q_PROPERTY(bool multiController MEMBER multiController NOTIFY multiControllerChanged)
     Q_PROPERTY(bool enableMdns MEMBER enableMdns NOTIFY enableMdnsChanged)
     Q_PROPERTY(bool quitAppAfter MEMBER quitAppAfter NOTIFY quitAppAfterChanged)
@@ -206,6 +208,7 @@ public:
     Q_PROPERTY(bool gamepadMouse MEMBER gamepadMouse NOTIFY gamepadMouseChanged)
     Q_PROPERTY(bool detectNetworkBlocking MEMBER detectNetworkBlocking NOTIFY detectNetworkBlockingChanged)
     Q_PROPERTY(bool showPerformanceOverlay MEMBER showPerformanceOverlay NOTIFY showPerformanceOverlayChanged)
+    Q_PROPERTY(bool showLatencySummary MEMBER showLatencySummary NOTIFY showLatencySummaryChanged)
     Q_PROPERTY(AudioConfig audioConfig MEMBER audioConfig NOTIFY audioConfigChanged)
     Q_PROPERTY(AudioLatencyProfile audioLatencyProfile MEMBER audioLatencyProfile NOTIFY audioLatencyProfileChanged)
     Q_PROPERTY(VideoCodecConfig videoCodecConfig MEMBER videoCodecConfig NOTIFY videoCodecConfigChanged)
@@ -221,6 +224,7 @@ public:
     Q_PROPERTY(WindowMode recommendedFullScreenMode MEMBER recommendedFullScreenMode CONSTANT)
     Q_PROPERTY(UIDisplayMode uiDisplayMode MEMBER uiDisplayMode NOTIFY uiDisplayModeChanged)
     Q_PROPERTY(bool swapMouseButtons MEMBER swapMouseButtons NOTIFY mouseButtonsChanged)
+    Q_PROPERTY(bool mouseWiggleOnConnect MEMBER mouseWiggleOnConnect NOTIFY mouseWiggleOnConnectChanged)
     Q_PROPERTY(bool muteOnFocusLoss MEMBER muteOnFocusLoss NOTIFY muteOnFocusLossChanged)
     Q_PROPERTY(bool backgroundGamepad MEMBER backgroundGamepad NOTIFY backgroundGamepadChanged)
     Q_PROPERTY(bool reverseScrollDirection MEMBER reverseScrollDirection NOTIFY reverseScrollDirectionChanged)
@@ -241,6 +245,8 @@ public:
     bool enableVsync;
     bool gameOptimizations;
     bool playAudioOnHost;
+    bool enableMicrophone;
+    QString microphoneDevice;
     bool multiController;
     bool enableMdns;
     bool quitAppAfter;
@@ -253,7 +259,9 @@ public:
     bool gamepadMouse;
     bool detectNetworkBlocking;
     bool showPerformanceOverlay;
+    bool showLatencySummary;
     bool swapMouseButtons;
+    bool mouseWiggleOnConnect;
     bool muteOnFocusLoss;
     bool backgroundGamepad;
     bool reverseScrollDirection;
@@ -285,6 +293,7 @@ signals:
     void enableVsyncChanged();
     void gameOptimizationsChanged();
     void playAudioOnHostChanged();
+    void microphoneChanged();
     void multiControllerChanged();
     void unsupportedFpsChanged();
     void enableMdnsChanged();
@@ -307,7 +316,9 @@ signals:
     void gamepadMouseChanged();
     void detectNetworkBlockingChanged();
     void showPerformanceOverlayChanged();
+    void showLatencySummaryChanged();
     void mouseButtonsChanged();
+    void mouseWiggleOnConnectChanged();
     void muteOnFocusLossChanged();
     void backgroundGamepadChanged();
     void reverseScrollDirectionChanged();

@@ -265,28 +265,31 @@ CenteredGridView {
             running: visible
         }
 
-        // Streaming-readiness warning badge: shown when the host is online and
-        // paired but its Hermes preflight reports a problem (e.g. software
-        // encoding fallback, no virtual-display backend). Advisory only — the
-        // user can still connect; this just sets expectations up front.
+        // Hermes status badge, like Hestia-Android's: shown when an online,
+        // paired Hermes host reports something that needs attention, such as a
+        // failing readiness check, a missing permission, a pairing the host no
+        // longer accepts or a monitor left off. Advisory only: the user can
+        // still connect; this just says up front what will go wrong.
         Image {
-            id: readinessWarningIcon
+            id: hestiaStatusIcon
             anchors.right: pcIcon.right
             anchors.top: pcIcon.top
             anchors.rightMargin: 8
             anchors.topMargin: 8
-            visible: model.online && model.paired && model.hestiaReadinessWarning
-            source: "qrc:/res/warning_FILL1_wght300_GRAD200_opsz24.svg"
+            visible: model.online && model.paired &&
+                     (model.hestiaStatusLevel === "warning" || model.hestiaStatusLevel === "error")
+            source: model.hestiaStatusLevel === "error" ? "qrc:/res/baseline-error_outline-24px.svg"
+                                                        : "qrc:/res/warning_FILL1_wght300_GRAD200_opsz24.svg"
             sourceSize {
                 width: 36
                 height: 36
             }
 
-            ToolTip.visible: readinessWarningMouseArea.containsMouse
-            ToolTip.text: model.hestiaReadinessDetails
+            ToolTip.visible: hestiaStatusMouseArea.containsMouse
+            ToolTip.text: model.hestiaStatusDetails
 
             MouseArea {
-                id: readinessWarningMouseArea
+                id: hestiaStatusMouseArea
                 anchors.fill: parent
                 hoverEnabled: true
             }
@@ -346,6 +349,35 @@ CenteredGridView {
                         computerModel.testConnectionForComputer(index)
                         testConnectionDialog.open()
                     }
+                }
+                NavigableMenuItem {
+                    // What the badge says, asked again now, like Hestia-Android's
+                    // Hermes dialog; also reachable with a keyboard or gamepad.
+                    text: qsTr("Hermes Status")
+                    visible: model.online && model.paired && model.hestiaStatusLevel !== ""
+                    onTriggered: {
+                        var status = computerModel.refreshHestiaStatus(index)
+                        var lines = status.valid ? status.details
+                                                 : qsTr("This host no longer reports the Hermes API.")
+                        if (status.serverVersion) {
+                            lines += "\n\n" + qsTr("Hermes %1 · Hestia protocol v%2")
+                                                    .arg(status.serverVersion).arg(status.protocol)
+                        }
+                        hermesStatusDialog.pcIndex = index
+                        hermesStatusDialog.recoveryOffered = status.recoveryOffered === true
+                        if (hermesStatusDialog.recoveryOffered) {
+                            lines += "\n\n" + qsTr("Turn the host's physical monitor back on? Any app still running on the host will be closed.")
+                        }
+                        hermesStatusDialog.title = qsTr("Hermes · %1").arg(model.name)
+                        hermesStatusDialog.text = lines
+                        hermesStatusDialog.open()
+                    }
+                }
+                NavigableMenuItem {
+                    text: qsTr("Open Host Web UI")
+                    visible: model.online && SystemProperties.hasBrowser &&
+                             computerModel.getHostWebUiUrl(index) !== ""
+                    onTriggered: Qt.openUrlExternally(computerModel.getHostWebUiUrl(index))
                 }
                 NavigableMenuItem {
                     text: qsTr("Hermes Display Status")
@@ -515,9 +547,9 @@ CenteredGridView {
     ErrorMessageDialog {
         id: errorDialog
 
-        // Using Setup-Guide here instead of Troubleshooting because it's likely that users
-        // will arrive here by forgetting to enable GameStream or not forwarding ports.
-        helpUrl: "https://github.com/moonlight-stream/moonlight-docs/wiki/Setup-Guide"
+        // Host setup rather than connection problems: users likely arrive here
+        // having not finished setting the host up or forwarded its ports.
+        helpUrl: "https://github.com/MrOz59/Hestia/blob/HEAD/docs/help.md#setting-up-a-host"
     }
 
     NavigableMessageDialog {
@@ -591,6 +623,23 @@ CenteredGridView {
     }
 
     NavigableMessageDialog { id: hestiaStatusDialog; standardButtons: Dialog.Ok }
+    NavigableMessageDialog {
+        id: hermesStatusDialog
+        property int pcIndex: -1
+        // When the monitor was left off and this client may turn it back on,
+        // the dialog asks; otherwise it only reports.
+        property bool recoveryOffered: false
+        standardButtons: recoveryOffered ? (Dialog.Yes | Dialog.No) : Dialog.Ok
+        onAccepted: {
+            if (recoveryOffered) {
+                hestiaStatusDialog.text = computerModel.recoverHestiaDisplay(pcIndex)
+                        ? qsTr("Physical display restored.")
+                        : qsTr("Physical display recovery is unavailable.")
+                hestiaStatusDialog.open()
+                computerModel.refreshHestiaStatus(pcIndex)
+            }
+        }
+    }
     NavigableDialog {
         id: hestiaDiagnosticsDialog
         property alias text: diagnosticsLabel.text

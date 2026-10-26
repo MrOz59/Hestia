@@ -8,6 +8,7 @@
 
 #include "streaming/session.h"
 #include "streaming/streamutils.h"
+#include "streaming/audio/microphone/microphonecapture.h"
 
 #ifdef Q_OS_WIN32
 #define WIN32_LEAN_AND_MEAN
@@ -196,6 +197,11 @@ QRect SystemProperties::getSafeAreaResolution(int displayIndex)
 {
     // Returns default constructed QRect if out of bounds
     return monitorSafeAreaResolutions.value(displayIndex);
+}
+
+QStringList SystemProperties::getMicrophoneDevices()
+{
+    return MicrophoneCapture::availableDevices();
 }
 
 int SystemProperties::getRefreshRate(int displayIndex)

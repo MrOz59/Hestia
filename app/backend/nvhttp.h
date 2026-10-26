@@ -4,6 +4,7 @@
 #include "nvapp.h"
 #include "nvaddress.h"
 #include "hestiacapabilities.h"
+#include "hestiahoststatus.h"
 
 #include <Limelight.h>
 
@@ -133,10 +134,13 @@ public:
     bool
     probeHestiaDiagnostics(HestiaPreflight* preflight);
 
+    // failureReason, when given, receives why a Hermes host did not prepare
+    // the session: its own error message when it sent one.
     bool
     prepareHestiaSession(const QJsonObject& sessionRequest,
                          QString* sessionId = nullptr,
-                         QMap<QString, uint32_t>* negotiatedExtensions = nullptr);
+                         QMap<QString, uint32_t>* negotiatedExtensions = nullptr,
+                         QString* failureReason = nullptr);
 
     bool
     stopHestiaSession(const QString& sessionId = QString());
@@ -147,11 +151,20 @@ public:
     bool
     recoverHestiaDisplay(bool force, QJsonObject* status);
 
+    // httpStatus, when given, is the host's HTTP status, or 0 when it never
+    // answered: a 401 says the host no longer accepts this client's pairing.
     bool
-    getHestiaClientPermissions(QJsonObject* permissions);
+    getHestiaClientPermissions(QJsonObject* permissions, int* httpStatus = nullptr);
 
     bool
     getHestiaDiagnostics(QJsonObject* diagnostics);
+
+    // Ask a Hermes host what its tile's status badge should show: this
+    // client's permissions, then, when it may see them, the host's
+    // diagnostics and display state. Not valid for a host without the
+    // Hestia v1 API.
+    HestiaHostStatus
+    probeHestiaHostStatus(const HestiaCapabilities& capabilities);
 
     bool
     getHestiaClipboard(QString* text);

@@ -92,7 +92,7 @@ jobs:
 
       - name: Configure (qmake6)
         run: |
-          qmake6 moonlight-qt.pro 2>&1 | tee /tmp/qmake.log
+          qmake6 -r moonlight-qt.pro 2>&1 | tee /tmp/qmake.log
           grep -F 'PyroWave decoder selected' /tmp/qmake.log
 
       - name: Build (make release)

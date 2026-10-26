@@ -21,12 +21,14 @@ struct Codec {
     }
 };
 
-static void check(pyrowave_result result) {
+static void checked(pyrowave_result result, const char* operation) {
     if (result != PYROWAVE_SUCCESS) {
-        std::fprintf(stderr, "PyroWave status %d\n", static_cast<int>(result));
+        std::fprintf(stderr, "PyroWave %s returned %d\n", operation, static_cast<int>(result));
         std::abort();
     }
 }
+
+#define check(operation) checked((operation), #operation)
 
 static pyrowave_cpu_buffer view(std::vector<uint8_t>& bytes, int width, int height) {
     const size_t luma = static_cast<size_t>(width) * height;

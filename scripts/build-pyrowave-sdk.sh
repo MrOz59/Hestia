@@ -27,6 +27,10 @@ cmake --install "$sdk/build"
 mkdir -p "$sdk/install/share/licenses/pyrowave"
 cp "$sdk/src/LICENSE" "$sdk/install/share/licenses/pyrowave/LICENSE"
 cp "$sdk/src/Granite/LICENSE" "$sdk/install/share/licenses/pyrowave/Granite-LICENSE"
+for license in "$sdk/src/Granite/third_party/volk"/LICENSE*; do
+    [[ -f "$license" ]] || continue
+    cp "$license" "$sdk/install/share/licenses/pyrowave/volk-LICENSE"
+done
 pkg_path="$sdk/install/share/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
 PKG_CONFIG_PATH="$pkg_path" pkg-config --atleast-version=0.5 pyrowave-shared
 if [[ -n "${GITHUB_ENV:-}" ]]; then

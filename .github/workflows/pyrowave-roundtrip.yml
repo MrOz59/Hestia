@@ -1,0 +1,35 @@
+name: PyroWave Vulkan roundtrip
+on:
+  push:
+    branches: [feature/pyrowave-codec]
+    paths:
+      - 'tests/test_pyrowave_roundtrip.cpp'
+      - 'tests/test_pyrowave_frame.cpp'
+      - 'app/streaming/video/pyrowaveframe.h'
+      - 'scripts/build-pyrowave-sdk.sh'
+      - '.github/workflows/pyrowave-roundtrip.yml'
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  roundtrip:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install software Vulkan and build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake g++ pkg-config libvulkan-dev mesa-vulkan-drivers
+          git submodule update --init --depth 1 moonlight-common-c/moonlight-common-c
+      - run: bash scripts/build-pyrowave-sdk.sh
+      - name: Encode and decode actual frames on separate Vulkan devices
+        shell: bash
+        run: |
+          set -euo pipefail
+          c++ -std=c++14 -g -I moonlight-common-c/moonlight-common-c/src tests/test_pyrowave_roundtrip.cpp \
+            $(pkg-config --cflags --libs pyrowave-shared) -o /tmp/pyrowave-roundtrip
+          icd="$(find /usr/share/vulkan/icd.d -name '*lvp*.json' -print -quit)"
+          [[ -f "$icd" ]]
+          VK_ICD_FILENAMES="$icd" /tmp/pyrowave-roundtrip

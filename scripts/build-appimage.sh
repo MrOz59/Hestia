@@ -27,7 +27,7 @@ echo Cleaning output directories
 rm -rf $BUILD_FOLDER
 rm -rf $DEPLOY_FOLDER
 rm -rf $INSTALLER_FOLDER
-mkdir $BUILD_ROOT
+mkdir -p $BUILD_ROOT
 mkdir $BUILD_FOLDER
 mkdir $DEPLOY_FOLDER
 mkdir $INSTALLER_FOLDER
@@ -46,7 +46,7 @@ pushd $BUILD_FOLDER
 # work even in X11. To avoid this, we will disable Wayland support for the AppImage.
 #
 # We disable DRM support because linuxdeploy doesn't bundle the appropriate libraries for Qt EGLFS.
-qmake6 $SOURCE_ROOT/moonlight-qt.pro CONFIG+=disable-wayland CONFIG+=disable-libdrm PREFIX=$DEPLOY_FOLDER/usr DEFINES+=APP_IMAGE || fail "Qmake failed!"
+qmake6 -r $SOURCE_ROOT/moonlight-qt.pro CONFIG+=disable-wayland CONFIG+=disable-libdrm PREFIX=$DEPLOY_FOLDER/usr DEFINES+=APP_IMAGE || fail "Qmake failed!"
 popd
 
 echo Compiling Moonlight in $BUILD_CONFIG configuration
@@ -58,6 +58,14 @@ echo Deploying to staging directory
 pushd $BUILD_FOLDER
 make install || fail "Make install failed!"
 popd
+
+# PyroWave is optional for local AppImages; release CI supplies its SDK.
+# linuxdeploy follows DT_NEEDED with LD_LIBRARY_PATH and bundles the runtime.
+if pkg-config --exists pyrowave-shared; then
+  mkdir -p "$DEPLOY_FOLDER/usr/share/licenses/hestia"
+  cp -R "$SOURCE_ROOT/build/pyrowave-sdk/install/share/licenses/pyrowave" \
+    "$DEPLOY_FOLDER/usr/share/licenses/hestia/"
+fi
 
 export QML_SOURCES_PATHS=$SOURCE_ROOT/app/gui
 export QMAKE=qmake6

@@ -21,7 +21,7 @@ jobs:
       - name: Install software Vulkan and build tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake g++ pkg-config libvulkan-dev mesa-vulkan-drivers
+          sudo apt-get install -y cmake g++ pkg-config libvulkan-dev mesa-vulkan-drivers vulkan-tools
           git submodule update --init --depth 1 moonlight-common-c/moonlight-common-c
       - run: bash scripts/build-pyrowave-sdk.sh
       - name: Encode and decode actual frames on separate Vulkan devices
@@ -32,4 +32,9 @@ jobs:
             $(pkg-config --cflags --libs pyrowave-shared) -o /tmp/pyrowave-roundtrip
           icd="$(find /usr/share/vulkan/icd.d -name '*lvp*.json' -print -quit)"
           [[ -f "$icd" ]]
-          VK_ICD_FILENAMES="$icd" /tmp/pyrowave-roundtrip
+          export VK_ICD_FILENAMES="$icd"
+          # PyroWave's encoder needs 16/32/64-lane subgroups. Lavapipe's
+          # default 8-lane vector is outside that supported set.
+          export LP_NATIVE_VECTOR_WIDTH=512
+          vulkaninfo --summary
+          /tmp/pyrowave-roundtrip

@@ -1,0 +1,38 @@
+{
+  "component": "Hestia",
+  "repository": "MrOz59/Hestia",
+  "tag": "october-2026-rc1",
+  "source_sha": "94a1bc58b510f7417bd208ed70cd22d2b89ed649",
+  "build_run": 40257911735,
+  "check_runs": [
+    40258014078
+  ],
+  "build_version": "0.1.0+94a1bc5",
+  "artifacts": [
+    {
+      "id": 12624526761,
+      "name": "Hestia-Linux-x86_64-ubuntu-24.04-94a1bc",
+      "digest": "sha256:603e7e0da593dd7a2ba8dabd6f7420e5fb5aaca4b43e226677654827a09eadd0"
+    },
+    {
+      "id": 12623374164,
+      "name": "Hestia-LinuxAppImage-94a1bc",
+      "digest": "sha256:66df902818b7733f2a8cb57ed4f827cc3b1f6a619aba8d12ed8025edfcc642ba"
+    },
+    {
+      "id": 12623063806,
+      "name": "Hestia-Linux-aarch64-ubuntu-24.04-arm-94a1bc",
+      "digest": "sha256:366fd7fe2625b0e27bf233f3c9d333377e4fea363ad765de4b826978bdfbe5e3"
+    },
+    {
+      "id": 12622999113,
+      "name": "Hestia-Arch-94a1bc",
+      "digest": "sha256:dc4fe5a3d2c4fb160148dc760f8519251081bdb27573f9e986158508e811eb77"
+    }
+  ],
+  "groups": {
+    "*.tar.gz": 2,
+    "*.pkg.tar.zst": 1,
+    "*.AppImage": 1
+  }
+}

@@ -160,6 +160,11 @@ jobs:
           wget https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-x86_64.AppImage
           chmod +x linuxdeploy*.AppImage
 
+      - name: Build pinned PyroWave SDK
+        run: |
+          bash scripts/build-pyrowave-sdk.sh
+          echo "LD_LIBRARY_PATH=$PWD/build/pyrowave-sdk/install/lib:/usr/local/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" >> "$GITHUB_ENV"
+
       - name: Build Binaries
         run: |
           sudo ldconfig

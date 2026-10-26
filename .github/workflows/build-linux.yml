@@ -70,7 +70,7 @@ jobs:
           # (libva, vdpau, drm, libplacebo) are gated by packagesExist() in the
           # .pro, so a missing package degrades features rather than failing.
           sudo apt-get install -y --no-install-recommends \
-            build-essential git pkg-config nasm \
+            build-essential git pkg-config nasm cmake patchelf libvulkan-dev \
             qmake6 qt6-base-dev libqt6opengl6-dev \
             qt6-declarative-dev libqt6svg6-dev qt6-wayland \
             qml6-module-qtquick qml6-module-qtquick-controls \
@@ -82,8 +82,18 @@ jobs:
             libva-dev libvdpau-dev libdrm-dev libplacebo-dev \
             libxkbcommon-dev wayland-protocols libwayland-dev libx11-dev
 
+      - name: Build pinned PyroWave SDK
+        run: bash scripts/build-pyrowave-sdk.sh
+
+      - name: Test opaque frame validation under sanitizers
+        run: |
+          c++ -std=c++14 -g -fsanitize=address,undefined -I moonlight-common-c/moonlight-common-c/src tests/test_pyrowave_frame.cpp -o /tmp/test-pyrowave-frame
+          /tmp/test-pyrowave-frame
+
       - name: Configure (qmake6)
-        run: qmake6 moonlight-qt.pro
+        run: |
+          qmake6 -r moonlight-qt.pro 2>&1 | tee /tmp/qmake.log
+          grep -F 'PyroWave decoder selected' /tmp/qmake.log
 
       - name: Build (make release)
         run: make release -j"$(nproc)"
@@ -119,6 +129,12 @@ jobs:
 
           mkdir -p "dist/${STAGE}"
           cp app/moonlight "dist/${STAGE}/moonlight"
+          mkdir -p "dist/${STAGE}/lib" "dist/${STAGE}/licenses"
+          cp -a build/pyrowave-sdk/install/lib/libpyrowave-shared.so* "dist/${STAGE}/lib/"
+          cp -R build/pyrowave-sdk/install/share/licenses/pyrowave "dist/${STAGE}/licenses/"
+          patchelf --set-rpath '$ORIGIN/lib' "dist/${STAGE}/moonlight"
+          ldd "dist/${STAGE}/moonlight" | tee /tmp/staged-libraries.txt
+          ! grep -F 'not found' /tmp/staged-libraries.txt
 
           tar -C dist -czf "dist/${STAGE}.tar.gz" "${STAGE}"
 

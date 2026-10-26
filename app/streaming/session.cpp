@@ -16,6 +16,10 @@
 #include "video/slvid.h"
 #endif
 
+#ifdef HAVE_PYROWAVE
+#include "video/pyrowavedecoder.h"
+#endif
+
 #ifdef Q_OS_WIN32
 // Scaling the icon down on Win32 looks dreadful, so render at lower res
 #define ICON_SIZE 32
@@ -305,6 +309,33 @@ bool Session::chooseDecoder(StreamingPreferences::VideoDecoderSelection vds,
     SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
                 "V-sync %s",
                 enableVsync ? "enabled" : "disabled");
+
+    // PyroWave has exactly one decoder; no other one can read its bitstream.
+    if (videoFormat & VIDEO_FORMAT_MASK_PYROWAVE) {
+#ifdef HAVE_PYROWAVE
+        if (vds == StreamingPreferences::VDS_FORCE_SOFTWARE) {
+            SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+                         "PyroWave requires its Vulkan decoder");
+            return false;
+        }
+
+        chosenDecoder = new PyroWaveVideoDecoder();
+        if (chosenDecoder->initialize(&params)) {
+            SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
+                        "PyroWave Vulkan video decoder chosen");
+            return true;
+        }
+
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+                     "Unable to initialize PyroWave decoder");
+        delete chosenDecoder;
+        chosenDecoder = nullptr;
+#else
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+                     "This Hestia build has no PyroWave support");
+#endif
+        return false;
+    }
 
 #ifdef HAVE_SLVIDEO
     chosenDecoder = new SLVideoDecoder(testOnly);
@@ -850,6 +881,11 @@ bool Session::initialize(QQuickWindow* qtWindow)
                 CHANNEL_MASK_FROM_AUDIO_CONFIGURATION(m_StreamConfig.audioConfiguration));
 
     // Start with all codecs and profiles in priority order
+#ifdef HAVE_PYROWAVE
+    if (m_Preferences->videoCodecConfig == StreamingPreferences::VCC_FORCE_PYROWAVE) {
+        m_SupportedVideoFormats.append(VIDEO_FORMAT_PYROWAVE);
+    }
+#endif
     m_SupportedVideoFormats.append(VIDEO_FORMAT_AV1_HIGH10_444);
     m_SupportedVideoFormats.append(VIDEO_FORMAT_AV1_MAIN10);
     m_SupportedVideoFormats.append(VIDEO_FORMAT_H265_REXT10_444);
@@ -982,6 +1018,11 @@ bool Session::initialize(QQuickWindow* qtWindow)
         // straight to H.264 if the user asked for AV1 and the host doesn't support it.
         m_SupportedVideoFormats.removeByMask(~(VIDEO_FORMAT_MASK_AV1 | VIDEO_FORMAT_MASK_H265));
         break;
+    case StreamingPreferences::VCC_FORCE_PYROWAVE:
+        // No fallback: an experiment that quietly streamed another codec
+        // would measure the wrong thing. validateLaunch() explains a refusal.
+        m_SupportedVideoFormats.removeByMask(~VIDEO_FORMAT_MASK_PYROWAVE);
+        break;
     }
 
     // NB: Since deprioritization puts codecs in reverse order (at the bottom of the list),
@@ -1110,6 +1151,33 @@ bool Session::validateLaunch(SDL_Window* testWindow)
 
     if (m_Preferences->videoDecoderSelection == StreamingPreferences::VDS_FORCE_SOFTWARE) {
         emitLaunchWarning(tr("Your settings selection to force software decoding may cause poor streaming performance."));
+    }
+
+    if (m_Preferences->videoCodecConfig == StreamingPreferences::VCC_FORCE_PYROWAVE) {
+        if (!(m_SupportedVideoFormats & VIDEO_FORMAT_MASK_PYROWAVE)) {
+            emit displayLaunchError(tr("This Hestia build was compiled without PyroWave support."));
+            return false;
+        }
+        if ((m_Computer->serverCodecModeSupport & SCM_PYROWAVE) == 0) {
+            emit displayLaunchError(tr("The selected Hermes host does not advertise PyroWave encoding support. Enable the experimental codec on a compatible Hermes host."));
+            return false;
+        }
+        if (m_Preferences->enableHdr || m_Preferences->enableYUV444) {
+            emit displayLaunchError(tr("PyroWave currently supports SDR YUV 4:2:0 streams only. Disable HDR and YUV 4:4:4 to use it."));
+            return false;
+        }
+        if (getDecoderAvailability(testWindow,
+                                   m_Preferences->videoDecoderSelection,
+                                   VIDEO_FORMAT_PYROWAVE,
+                                   m_StreamConfig.width,
+                                   m_StreamConfig.height,
+                                   m_StreamConfig.fps) == DecoderAvailability::None) {
+            emit displayLaunchError(tr("Unable to initialize the PyroWave Vulkan decoder on this device."));
+            return false;
+        }
+        if (m_StreamConfig.bitrate < 200000) {
+            emitLaunchWarning(tr("PyroWave is designed for high-bandwidth LAN streaming (about 200 Mbps or more). The selected bitrate may produce poor image quality."));
+        }
     }
 
     if (m_SupportedVideoFormats & VIDEO_FORMAT_MASK_AV1) {

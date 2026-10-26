@@ -214,7 +214,7 @@ bool HestiaCapabilities::fromJson(const QJsonObject& response, HestiaCapabilitie
             !readPositiveInteger(limits, "max_height", &parsed.limits.maxHeight, error) ||
             !readPositiveInteger(limits, "max_fps", &parsed.limits.maxFps, error) ||
             !readPositiveIntegerArray(limits, "supported_fps", &parsed.limits.supportedFps, error) ||
-            !readStringArray(limits, "supported_codecs", {"h264", "hevc", "av1"}, &parsed.limits.supportedCodecs, error)) {
+            !readStringArray(limits, "supported_codecs", {"h264", "hevc", "av1", "pyrowave"}, &parsed.limits.supportedCodecs, error)) {
         return false;
     }
 

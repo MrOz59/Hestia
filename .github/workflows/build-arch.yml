@@ -15,6 +15,12 @@ on:
       ci_version:
         required: true
         type: string
+      # The version the client reports (see build.yml); empty for the plain
+      # app/version.txt number.
+      build_version:
+        required: false
+        type: string
+        default: ''
   # Also allow running this one on its own.
   workflow_dispatch:
 
@@ -26,6 +32,9 @@ jobs:
       options: --privileged
     env:
       CI_VERSION: ${{ inputs.ci_version }}
+      # Stamped into the PKGBUILD below; sudo would drop it from the
+      # environment on the way to makepkg.
+      HESTIA_BUILD_VERSION: ${{ inputs.build_version }}
 
     steps:
       - name: Install base tooling
@@ -47,6 +56,16 @@ jobs:
 
       - name: Hand the checkout to the build user
         run: chown -R builder:builder "$GITHUB_WORKSPACE"
+
+      # The package carries the build version (0.1.0+abc1234 on a nightly),
+      # and the PKGBUILD hands a stamped pkgver on to qmake, so the client
+      # reports the same version as the package it came in.
+      - name: Stamp the package version
+        if: ${{ env.HESTIA_BUILD_VERSION != '' }}
+        working-directory: packaging/arch
+        run: |
+          sed -i "s/^pkgver=.*/pkgver=${HESTIA_BUILD_VERSION}/" PKGBUILD
+          grep '^pkgver=' PKGBUILD
 
       - name: Build package (makepkg)
         working-directory: packaging/arch

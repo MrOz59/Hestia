@@ -19,7 +19,7 @@ depends=('qt6-base' 'qt6-declarative' 'qt6-svg' 'qt6-wayland'
          'libxkbcommon' 'wayland')
 # vulkan-headers is needed at build time because libplacebo's public headers
 # (pulled in via packagesExist(libplacebo)) include <vulkan/vulkan.h>.
-makedepends=('qt6-tools' 'pkgconf' 'nasm' 'wayland-protocols' 'vulkan-headers')
+makedepends=('qt6-tools' 'pkgconf' 'nasm' 'wayland-protocols' 'vulkan-headers' 'cmake' 'git' 'patchelf')
 options=('!lto')
 
 build() {
@@ -31,6 +31,9 @@ build() {
         export HESTIA_BUILD_VERSION="$pkgver"
     fi
 
+    GITHUB_ENV= bash scripts/build-pyrowave-sdk.sh
+    export PKG_CONFIG_PATH="$PWD/build/pyrowave-sdk/install/share/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+    pkg-config --exists pyrowave-shared
     qmake6 PREFIX=/usr moonlight-qt.pro
     make release -j"$(nproc)"
 }
@@ -39,4 +42,10 @@ package() {
     cd "$startdir/../.."
 
     make INSTALL_ROOT="$pkgdir" install
+    # Keep codec libraries private so installing Hestia next to Hermes never
+    # gives two packages ownership of the same /usr/lib files.
+    install -d "$pkgdir/usr/lib/hestia" "$pkgdir/usr/share/licenses/hestia"
+    cp -a build/pyrowave-sdk/install/lib/libpyrowave-shared.so* "$pkgdir/usr/lib/hestia/"
+    cp -R build/pyrowave-sdk/install/share/licenses/pyrowave "$pkgdir/usr/share/licenses/hestia/"
+    patchelf --set-rpath /usr/lib/hestia "$pkgdir/usr/bin/moonlight"
 }

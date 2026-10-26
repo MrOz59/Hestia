@@ -66,7 +66,7 @@ unix:if(!macx|disable-prebuilts) {
     PKGCONFIG += openssl sdl2 SDL2_ttf
 
     packagesExist(pyrowave-shared) {
-        PKGCONFIG += pyrowave-shared
+        PKGCONFIG += pyrowave-shared vulkan
         CONFIG += pyrowave
     }
 
@@ -260,7 +260,7 @@ pyrowave {
 
     DEFINES += HAVE_PYROWAVE
     SOURCES += streaming/video/pyrowavedecoder.cpp
-    HEADERS += streaming/video/pyrowavedecoder.h
+    HEADERS += streaming/video/pyrowavedecoder.h streaming/video/pyrowaveframe.h
 }
 
 # Platform-specific renderers and decoders

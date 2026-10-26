@@ -1,4 +1,5 @@
 #include "pyrowavedecoder.h"
+#include "pyrowaveframe.h"
 
 #include "streaming/session.h"
 
@@ -189,31 +190,14 @@ QSize PyroWaveVideoDecoder::getDecoderMaxResolution()
 
 int PyroWaveVideoDecoder::submitDecodeUnit(PDECODE_UNIT decodeUnit)
 {
-    if (decodeUnit == nullptr || decodeUnit->fullLength <= 0 ||
-            decodeUnit->bufferList == nullptr) {
-        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
-                     "PyroWave received an invalid decode unit");
+    const uint8_t* encoded = nullptr;
+    size_t encodedSize = 0;
+    if (!collectPyroWaveFrame(decodeUnit, m_EncodedFrame, encoded, encodedSize)) {
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "PyroWave received an invalid decode unit");
         return DR_NEED_IDR;
     }
-
     pyrowave_decoder_clear(m_Decoder);
 
-    // A frame normally arrives as one buffer and is decoded where it lies.
-    const uint8_t* encoded = reinterpret_cast<const uint8_t*>(decodeUnit->bufferList->data);
-    size_t encodedSize = static_cast<size_t>(decodeUnit->bufferList->length);
-    if (decodeUnit->bufferList->next != nullptr) {
-        m_EncodedFrame.clear();
-        for (PLENTRY entry = decodeUnit->bufferList;
-             entry != nullptr;
-             entry = entry->next) {
-            const auto* begin = reinterpret_cast<const uint8_t*>(entry->data);
-            m_EncodedFrame.insert(m_EncodedFrame.end(),
-                                  begin,
-                                  begin + entry->length);
-        }
-        encoded = m_EncodedFrame.data();
-        encodedSize = m_EncodedFrame.size();
-    }
     if (encodedSize == 0 ||
             !checkPyroWave(
                 pyrowave_decoder_push_packet(m_Decoder,
@@ -331,3 +315,4 @@ bool PyroWaveVideoDecoder::notifyWindowChanged(PWINDOW_STATE_CHANGE_INFO)
 {
     return false;
 }
+

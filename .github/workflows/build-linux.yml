@@ -82,6 +82,13 @@ jobs:
             libva-dev libvdpau-dev libdrm-dev libplacebo-dev \
             libxkbcommon-dev wayland-protocols libwayland-dev libx11-dev
 
+      - name: Run Hermes host-health unit tests
+        run: |
+          cd tests
+          qmake6 hoststatus.pro
+          make -j"$(nproc)"
+          ./tst_hestiahoststatus
+
       - name: Build pinned PyroWave SDK
         run: bash scripts/build-pyrowave-sdk.sh
 

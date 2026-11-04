@@ -354,6 +354,14 @@ CenteredGridView {
                     }
                 }
                 NavigableMenuItem {
+                    text: qsTr("Copy Hermes Diagnostic Report")
+                    visible: model.online && model.paired && model.hestiaEnhanced
+                    onTriggered: {
+                        copyDiagnosticReportDialog.pcIndex = index
+                        copyDiagnosticReportDialog.open()
+                    }
+                }
+                NavigableMenuItem {
                     text: qsTr("Paste Host Clipboard")
                     visible: model.online && model.paired && model.hestiaClipboardSync && StreamingPreferences.hestiaClipboardSync
                     onTriggered: { pasteHostClipboardDialog.pcIndex = index; pasteHostClipboardDialog.open() }
@@ -544,6 +552,23 @@ CenteredGridView {
         }
     }
 
+    Connections {
+        target: computerModel
+        onHestiaDiagnosticReportCopied: {
+            hestiaStatusDialog.text = copied ?
+                qsTr("The Hermes diagnostic report was copied to your clipboard.") :
+                qsTr("Hermes could not provide a diagnostic report. Check your permissions or update Hermes.")
+            hestiaStatusDialog.open()
+        }
+    }
+
+    NavigableMessageDialog {
+        id: copyDiagnosticReportDialog
+        property int pcIndex: -1
+        text: qsTr("Copy a Hermes diagnostic report to your clipboard? Reports may contain system and network details.")
+        standardButtons: Dialog.Yes | Dialog.No
+        onAccepted: computerModel.requestHestiaDiagnosticReport(pcIndex)
+    }
     NavigableMessageDialog { id: hestiaStatusDialog; standardButtons: Dialog.Ok }
     NavigableMessageDialog {
         id: pasteHostClipboardDialog

@@ -271,6 +271,35 @@ QVariantMap ComputerModel::getHestiaDiagnostics(int computerIndex)
     return http.getHestiaDiagnostics(&diagnostics) ? diagnostics.toVariantMap() : QVariantMap{};
 }
 
+
+void ComputerModel::requestHestiaDiagnosticReport(int computerIndex)
+{
+    if (computerIndex < 0 || computerIndex >= m_Computers.count()) {
+        emit hestiaDiagnosticReportCopied(false);
+        return;
+    }
+
+    NvComputer* computer = m_Computers[computerIndex];
+    if (computer->pairState != NvComputer::PS_PAIRED ||
+        !computer->hestiaCapabilities.supportsProtocolV1) {
+        emit hestiaDiagnosticReportCopied(false);
+        return;
+    }
+
+    // Keep the connection alive for its asynchronous request. The model owns
+    // the request, so closing the host list safely cancels the pending callback.
+    NvHTTP* http = new NvHTTP(computer);
+    http->setParent(this);
+    http->requestHestiaDiagnosticReport(
+            [this, http](bool ok, const QString& report) {
+        if (ok) {
+            QGuiApplication::clipboard()->setText(report);
+        }
+        emit hestiaDiagnosticReportCopied(ok);
+        http->deleteLater();
+    });
+}
+
 bool ComputerModel::pasteHestiaClipboard(int computerIndex)
 {
     if (computerIndex < 0 || computerIndex >= m_Computers.count()) {

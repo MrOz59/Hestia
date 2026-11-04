@@ -662,6 +662,53 @@ bool NvHTTP::getHestiaDiagnostics(QJsonObject* diagnostics)
     return true;
 }
 
+
+void NvHTTP::requestHestiaDiagnosticReport(std::function<void(bool, const QString&)> completed)
+{
+    if (m_ServerCert.isNull()) {
+        completed(false, QString());
+        return;
+    }
+
+    QUrl url;
+    url.setScheme("https");
+    url.setHost(m_Address.address());
+    url.setPort(m_Address.port() + 1);
+    url.setPath("/api/hestia/v1/diagnostics/report");
+
+    QNetworkRequest request(url);
+    request.setRawHeader("Accept", "text/plain");
+    request.setSslConfiguration(IdentityManager::get()->getSslConfig());
+
+    // The existing paired-host TLS verification handles this request too.
+    const auto sslConnection = connect(m_Nam, &QNetworkAccessManager::sslErrors,
+                                       this, &NvHTTP::handleSslErrors);
+    QNetworkReply* reply = m_Nam->get(request);
+    QTimer* timeout = new QTimer(reply);
+    timeout->setSingleShot(true);
+    connect(timeout, &QTimer::timeout, reply, &QNetworkReply::abort);
+
+    connect(reply, &QNetworkReply::finished, this,
+            [this, reply, timeout, sslConnection, completed = std::move(completed)]() {
+        timeout->stop();
+        disconnect(sslConnection);
+
+        const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        bool ok = reply->error() == QNetworkReply::NoError && status >= 200 && status < 300;
+        QByteArray content;
+        if (ok) {
+            // A diagnostic report can contain logs and device information. Limit
+            // memory use and never print its contents in client debug output.
+            content = reply->read(4 * 1024 * 1024 + 1);
+            ok = !content.isEmpty() && content.size() <= 4 * 1024 * 1024;
+        }
+
+        reply->deleteLater();
+        completed(ok, ok ? QString::fromUtf8(content) : QString());
+    });
+    timeout->start(15000);
+}
+
 bool NvHTTP::getHestiaClipboard(QString* text)
 {
     Q_ASSERT(text != nullptr);

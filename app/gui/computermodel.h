@@ -61,6 +61,8 @@ public:
 
     Q_INVOKABLE QVariantMap getHestiaDiagnostics(int computerIndex);
 
+    Q_INVOKABLE QString getHostWebUiUrl(int computerIndex);
+
     Q_INVOKABLE void requestHestiaDiagnosticReport(int computerIndex);
 
     Q_INVOKABLE bool pasteHestiaClipboard(int computerIndex);

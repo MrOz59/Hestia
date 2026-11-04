@@ -231,6 +231,12 @@ CenteredGridView {
                     }
                 }
                 NavigableMenuItem {
+                    text: qsTr("Open Host Web UI")
+                    visible: model.online && SystemProperties.hasBrowser &&
+                             computerModel.getHostWebUiUrl(index) !== ""
+                    onTriggered: Qt.openUrlExternally(computerModel.getHostWebUiUrl(index))
+                }
+                NavigableMenuItem {
                     text: qsTr("Hermes Display Status")
                     visible: model.online && model.paired && model.hestiaEnhanced
                     onTriggered: {

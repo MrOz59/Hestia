@@ -4,6 +4,7 @@
 #include <QThreadPool>
 #include <QClipboard>
 #include <QGuiApplication>
+#include <QUrl>
 
 ComputerModel::ComputerModel(QObject* object)
     : QAbstractListModel(object) {}
@@ -255,6 +256,26 @@ QVariantMap ComputerModel::getHestiaClientPermissions(int computerIndex)
     NvHTTP http(computer);
     QJsonObject permissions;
     return http.getHestiaClientPermissions(&permissions) ? permissions.toVariantMap() : QVariantMap{};
+}
+
+
+QString ComputerModel::getHostWebUiUrl(int computerIndex)
+{
+    if (computerIndex < 0 || computerIndex >= m_Computers.count()) {
+        return QString();
+    }
+    NvComputer* computer = m_Computers[computerIndex];
+    QReadLocker lock(&computer->lock);
+    if (computer->isNvidiaServerSoftware || computer->activeAddress.isNull() ||
+        computer->state != NvComputer::CS_ONLINE) {
+        return QString();
+    }
+    QUrl url;
+    url.setScheme(QStringLiteral("https"));
+    url.setHost(computer->activeAddress.address());
+    url.setPort(computer->activeAddress.port() + 1);
+    url.setPath(QStringLiteral("/"));
+    return url.toString();
 }
 
 QVariantMap ComputerModel::getHestiaDiagnostics(int computerIndex)

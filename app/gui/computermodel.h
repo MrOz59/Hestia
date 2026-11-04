@@ -22,8 +22,8 @@ class ComputerModel : public QAbstractListModel
         HestiaServerCommandsRole,
         HestiaPermissionSystemRole,
         HestiaClipboardSyncRole,
-        HestiaReadinessWarningRole,
-        HestiaReadinessDetailsRole,
+        HestiaStatusLevelRole,
+        HestiaStatusDetailsRole,
         DetailsRole
     };
 

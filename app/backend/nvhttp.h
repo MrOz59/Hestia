@@ -146,8 +146,9 @@ public:
     bool
     recoverHestiaDisplay(bool force, QJsonObject* status);
 
+    // Optional HTTP result distinguishes revoked certificates (401) from timeouts.
     bool
-    getHestiaClientPermissions(QJsonObject* permissions);
+    getHestiaClientPermissions(QJsonObject* permissions, int* httpStatus = nullptr);
 
     bool
     getHestiaDiagnostics(QJsonObject* diagnostics);

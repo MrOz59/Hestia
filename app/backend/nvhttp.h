@@ -10,6 +10,7 @@
 #include <QUrl>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
+#include <functional>
 
 class NvComputer;
 class QJsonArray;
@@ -150,6 +151,11 @@ public:
 
     bool
     getHestiaDiagnostics(QJsonObject* diagnostics);
+
+    // Asynchronously fetch a host-generated text report over paired HTTPS.
+    // Completion receives false for older hosts, permission errors or timeouts.
+    // Report content is never written to the client log.
+    void requestHestiaDiagnosticReport(std::function<void(bool, const QString&)> completed);
 
     bool
     getHestiaClipboard(QString* text);

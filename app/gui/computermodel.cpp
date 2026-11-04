@@ -4,6 +4,7 @@
 #include <QThreadPool>
 #include <QClipboard>
 #include <QGuiApplication>
+#include <QUrl>
 
 ComputerModel::ComputerModel(QObject* object)
     : QAbstractListModel(object) {}
@@ -257,6 +258,26 @@ QVariantMap ComputerModel::getHestiaClientPermissions(int computerIndex)
     return http.getHestiaClientPermissions(&permissions) ? permissions.toVariantMap() : QVariantMap{};
 }
 
+
+QString ComputerModel::getHostWebUiUrl(int computerIndex)
+{
+    if (computerIndex < 0 || computerIndex >= m_Computers.count()) {
+        return QString();
+    }
+    NvComputer* computer = m_Computers[computerIndex];
+    QReadLocker lock(&computer->lock);
+    if (computer->isNvidiaServerSoftware || computer->activeAddress.isNull() ||
+        computer->state != NvComputer::CS_ONLINE) {
+        return QString();
+    }
+    QUrl url;
+    url.setScheme(QStringLiteral("https"));
+    url.setHost(computer->activeAddress.address());
+    url.setPort(computer->activeAddress.port() + 1);
+    url.setPath(QStringLiteral("/"));
+    return url.toString();
+}
+
 QVariantMap ComputerModel::getHestiaDiagnostics(int computerIndex)
 {
     if (computerIndex < 0 || computerIndex >= m_Computers.count()) {
@@ -269,6 +290,35 @@ QVariantMap ComputerModel::getHestiaDiagnostics(int computerIndex)
     NvHTTP http(computer);
     QJsonObject diagnostics;
     return http.getHestiaDiagnostics(&diagnostics) ? diagnostics.toVariantMap() : QVariantMap{};
+}
+
+
+void ComputerModel::requestHestiaDiagnosticReport(int computerIndex)
+{
+    if (computerIndex < 0 || computerIndex >= m_Computers.count()) {
+        emit hestiaDiagnosticReportCopied(false);
+        return;
+    }
+
+    NvComputer* computer = m_Computers[computerIndex];
+    if (computer->pairState != NvComputer::PS_PAIRED ||
+        !computer->hestiaCapabilities.supportsProtocolV1) {
+        emit hestiaDiagnosticReportCopied(false);
+        return;
+    }
+
+    // Keep the connection alive for its asynchronous request. The model owns
+    // the request, so closing the host list safely cancels the pending callback.
+    NvHTTP* http = new NvHTTP(computer);
+    http->setParent(this);
+    http->requestHestiaDiagnosticReport(
+            [this, http](bool ok, const QString& report) {
+        if (ok) {
+            QGuiApplication::clipboard()->setText(report);
+        }
+        emit hestiaDiagnosticReportCopied(ok);
+        http->deleteLater();
+    });
 }
 
 bool ComputerModel::pasteHestiaClipboard(int computerIndex)

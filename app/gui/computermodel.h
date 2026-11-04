@@ -61,6 +61,10 @@ public:
 
     Q_INVOKABLE QVariantMap getHestiaDiagnostics(int computerIndex);
 
+    Q_INVOKABLE QString getHostWebUiUrl(int computerIndex);
+
+    Q_INVOKABLE void requestHestiaDiagnosticReport(int computerIndex);
+
     Q_INVOKABLE bool pasteHestiaClipboard(int computerIndex);
 
     Q_INVOKABLE bool sendHestiaClipboard(int computerIndex);
@@ -72,6 +76,7 @@ public:
     Q_INVOKABLE Session* createSessionForCurrentGame(int computerIndex);
 
 signals:
+    void hestiaDiagnosticReportCopied(bool copied);
     void pairingCompleted(QVariant error);
     void connectionTestCompleted(int result, QString blockedPorts);
 

@@ -231,6 +231,12 @@ CenteredGridView {
                     }
                 }
                 NavigableMenuItem {
+                    text: qsTr("Open Host Web UI")
+                    visible: model.online && SystemProperties.hasBrowser &&
+                             computerModel.getHostWebUiUrl(index) !== ""
+                    onTriggered: Qt.openUrlExternally(computerModel.getHostWebUiUrl(index))
+                }
+                NavigableMenuItem {
                     text: qsTr("Hermes Display Status")
                     visible: model.online && model.paired && model.hestiaEnhanced
                     onTriggered: {
@@ -354,6 +360,14 @@ CenteredGridView {
                     }
                 }
                 NavigableMenuItem {
+                    text: qsTr("Copy Hermes Diagnostic Report")
+                    visible: model.online && model.paired && model.hestiaEnhanced
+                    onTriggered: {
+                        copyDiagnosticReportDialog.pcIndex = index
+                        copyDiagnosticReportDialog.open()
+                    }
+                }
+                NavigableMenuItem {
                     text: qsTr("Paste Host Clipboard")
                     visible: model.online && model.paired && model.hestiaClipboardSync && StreamingPreferences.hestiaClipboardSync
                     onTriggered: { pasteHostClipboardDialog.pcIndex = index; pasteHostClipboardDialog.open() }
@@ -469,9 +483,9 @@ CenteredGridView {
     ErrorMessageDialog {
         id: errorDialog
 
-        // Using Setup-Guide here instead of Troubleshooting because it's likely that users
-        // will arrive here by forgetting to enable GameStream or not forwarding ports.
-        helpUrl: "https://github.com/moonlight-stream/moonlight-docs/wiki/Setup-Guide"
+        // Host setup rather than connection problems: users likely arrive here
+        // having not finished setting the host up or forwarded its ports.
+        helpUrl: "https://github.com/MrOz59/Hestia/blob/HEAD/docs/help.md#setting-up-a-host"
     }
 
     NavigableMessageDialog {
@@ -544,6 +558,23 @@ CenteredGridView {
         }
     }
 
+    Connections {
+        target: computerModel
+        onHestiaDiagnosticReportCopied: {
+            hestiaStatusDialog.text = copied ?
+                qsTr("The Hermes diagnostic report was copied to your clipboard.") :
+                qsTr("Hermes could not provide a diagnostic report. Check your permissions or update Hermes.")
+            hestiaStatusDialog.open()
+        }
+    }
+
+    NavigableMessageDialog {
+        id: copyDiagnosticReportDialog
+        property int pcIndex: -1
+        text: qsTr("Copy a Hermes diagnostic report to your clipboard? Reports may contain system and network details.")
+        standardButtons: Dialog.Yes | Dialog.No
+        onAccepted: computerModel.requestHestiaDiagnosticReport(pcIndex)
+    }
     NavigableMessageDialog { id: hestiaStatusDialog; standardButtons: Dialog.Ok }
     NavigableMessageDialog {
         id: pasteHostClipboardDialog

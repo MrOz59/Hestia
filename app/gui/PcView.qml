@@ -148,28 +148,28 @@ CenteredGridView {
             running: visible
         }
 
-        // Streaming-readiness warning badge: shown when the host is online and
-        // paired but its Hermes preflight reports a problem (e.g. software
-        // encoding fallback, no virtual-display backend). Advisory only — the
-        // user can still connect; this just sets expectations up front.
+        // The Android-compatible Hermes host-health badge. This is advisory:
+        // no streaming path is blocked by missing diagnostic endpoints.
         Image {
-            id: readinessWarningIcon
+            id: hestiaStatusIcon
             anchors.right: pcIcon.right
             anchors.top: pcIcon.top
             anchors.rightMargin: 8
             anchors.topMargin: 8
-            visible: model.online && model.paired && model.hestiaReadinessWarning
-            source: "qrc:/res/warning_FILL1_wght300_GRAD200_opsz24.svg"
+            visible: model.online && model.paired &&
+                     (model.hestiaStatusLevel === "warning" || model.hestiaStatusLevel === "error")
+            source: model.hestiaStatusLevel === "error" ?
+                        "qrc:/res/baseline-error_outline-24px.svg" :
+                        "qrc:/res/warning_FILL1_wght300_GRAD200_opsz24.svg"
             sourceSize {
                 width: 36
                 height: 36
             }
 
-            ToolTip.visible: readinessWarningMouseArea.containsMouse
-            ToolTip.text: model.hestiaReadinessDetails
-
+            ToolTip.visible: hestiaStatusMouseArea.containsMouse
+            ToolTip.text: model.hestiaStatusDetails
             MouseArea {
-                id: readinessWarningMouseArea
+                id: hestiaStatusMouseArea
                 anchors.fill: parent
                 hoverEnabled: true
             }
@@ -235,6 +235,14 @@ CenteredGridView {
                     visible: model.online && SystemProperties.hasBrowser &&
                              computerModel.getHostWebUiUrl(index) !== ""
                     onTriggered: Qt.openUrlExternally(computerModel.getHostWebUiUrl(index))
+                }
+                NavigableMenuItem {
+                    text: qsTr("Hermes Status")
+                    visible: model.online && model.paired && model.hestiaStatusLevel !== ""
+                    onTriggered: {
+                        hestiaStatusDialog.text = model.hestiaStatusDetails
+                        hestiaStatusDialog.open()
+                    }
                 }
                 NavigableMenuItem {
                     text: qsTr("Hermes Display Status")

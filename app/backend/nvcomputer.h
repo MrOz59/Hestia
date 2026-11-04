@@ -3,6 +3,7 @@
 #include "nvhttp.h"
 #include "nvaddress.h"
 #include "hestiacapabilities.h"
+#include "hestiahoststatus.h"
 
 #include <QThread>
 #include <QReadWriteLock>
@@ -105,15 +106,9 @@ public:
 
     void setHestiaCapabilities(const HestiaCapabilities& capabilities);
 
-    // Streaming-readiness preflight (from the Hermes diagnostics endpoint).
-    // Refreshed alongside capabilities for paired hosts; advisory only.
-    HestiaPreflight hestiaPreflight;
-
-    void setHestiaPreflight(const HestiaPreflight& preflight);
-
-    // True when the host reported a preflight and it has at least one failing
-    // check (i.e. not ready to stream). Used to flag the host in the UI.
-    bool hasHestiaReadinessWarning() const;
+    // Ephemeral Hestia host status, refreshed independently of GameStream.
+    HestiaHostStatus hestiaStatus;
+    bool setHestiaStatus(const HestiaHostStatus& status);
 
     // Persisted traits
     NvAddress localAddress;

@@ -29,7 +29,7 @@ Sources: `MrOz59/Hestia` (`master` at `c84505f`), `MrOz59/Hestia` (`dev` at `109
 
 | Feature | Desktop master | `dev`/PR #5 | Priority / recommendation |
 | --- | --- | --- | --- |
-| Complete Hermes host health badge (permissions, certificate errors, preflight, recent session, monitor status) | Partial preflight-only warning | Implemented on dev, not merged to master | **P1**: port independently |
+| Complete Hermes host health badge (permissions, certificate errors, preflight, recent session, monitor status) | Being ported in PR #9; not yet merged into master | Implemented on dev and independently adapted to master | **P1**: CI and live-host verification before merge |
 | Client microphone passthrough to Hermes/Apollo | No | Implemented on dev, requires forked `moonlight-common-c` | **P1**: integrate common-c PyroWave + microphone carefully |
 | Explicit error after Hermes declines `session/prepare` | Partial/log feedback | Implemented on dev | **P1**: adapt to master session code |
 | Post-stream latency summary | No explicit post-stream toast | Implemented on dev; depends on telemetry changes | **P2**: implement against master telemetry |
@@ -73,3 +73,9 @@ Android TV/Google TV/Fire TV leanback UI, external display/DeX, PiP, on-screen g
 6. Keep report exports opt-in and avoid logging diagnostic-report bodies or clipboard contents.
 
 Related: desktop parity PR #5 (merged to **dev**), Android PR #28 (stream provenance), Android PR #29 (diagnostic reports).
+
+## Parity integration progress
+
+- **Part 1:** PR #8 merged into `master` on 2026-11-04 (UTC): native Hestia help, host web UI and diagnostic report copy.
+- **Part 2:** PR #9 targets `master` directly and adds Hermes host-health findings and periodic status refresh. Separate Qt tests cover permissions, revoked certificates, preflight, session endings, and display recovery. This remains draft until CI and a physical host test.
+- Later parts: session preparation feedback, stream provenance, post-stream latency summary, named profiles, and (after careful `moonlight-common-c` integration) microphone passthrough and mouse-wiggle opt-out.

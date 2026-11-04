@@ -15,6 +15,7 @@
 #include <QImageReader>
 #include <QtEndian>
 #include <QNetworkProxy>
+#include <utility>
 
 #define FAST_FAIL_TIMEOUT_MS 2000
 #define REQUEST_TIMEOUT_MS 5000

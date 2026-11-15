@@ -227,8 +227,8 @@
     </message>
     <message>
         <location filename="../gui/PcView.qml" line="66"/>
-        <source>This PC&apos;s Internet connection is blocking Moonlight. Streaming over the Internet may not work while connected to this network.</source>
-        <translation>A conexão de internet deste PC está bloqueando o Moonlight. Fazer stream pela internet pode não funcionar quando conectado nesta rede.</translation>
+        <source>This PC&apos;s Internet connection is blocking Hestia. Streaming over the Internet may not work while connected to this network.</source>
+        <translation>A conexão de internet deste PC está bloqueando o Hestia. Fazer stream pela internet pode não funcionar quando conectado nesta rede.</translation>
     </message>
     <message>
         <location filename="../gui/PcView.qml" line="69"/>
@@ -272,8 +272,8 @@
     </message>
     <message>
         <location filename="../gui/PcView.qml" line="225"/>
-        <source>The version of GeForce Experience on %1 is not supported by this build of Moonlight. You must update Moonlight to stream from %1.</source>
-        <translation>A versão do GeForce Experience %1 não é suportada pela sua versão do Moonlight. Você deve atualizar o Moonlight para usar a versão %1.</translation>
+        <source>The version of GeForce Experience on %1 is not supported by this build of Hestia. You must update Hestia to stream from %1.</source>
+        <translation>A versão do GeForce Experience %1 não é suportada pela sua versão do Hestia. Você deve atualizar o Hestia para usar a versão %1.</translation>
     </message>
     <message>
         <location filename="../gui/PcView.qml" line="324"/>
@@ -282,18 +282,18 @@
     </message>
     <message>
         <location filename="../gui/PcView.qml" line="335"/>
-        <source>This network does not appear to be blocking Moonlight. If you still have trouble connecting, check your PC&apos;s firewall settings.</source>
-        <translation>Esta rede não parece estar bloqueando o Moonlight. Se você ainda tiver problemas para se conectar, verifique as configurações de firewall do seu PC.</translation>
+        <source>This network does not appear to be blocking Hestia. If you still have trouble connecting, check your PC&apos;s firewall settings.</source>
+        <translation>Esta rede não parece estar bloqueando o Hestia. Se você ainda tiver problemas para se conectar, verifique as configurações de firewall do seu PC.</translation>
     </message>
     <message>
         <location filename="../gui/PcView.qml" line="335"/>
         <source>If you are trying to stream over the Internet, install the Moonlight Internet Hosting Tool on your gaming PC and run the included Internet Streaming Tester to check your gaming PC&apos;s Internet connection.</source>
-        <translation>Se você estiver tentando transmitir pela Internet, instale a Ferramenta de Hospedagem de Internet Moonlight no seu PC para jogos e execute o Internet Streaming Tester incluído para verificar a conexão com a Internet do seu PC para jogos.</translation>
+        <translation>Se você estiver tentando transmitir pela Internet, instale a Ferramenta de Hospedagem de Internet Hestia no seu PC para jogos e execute o Internet Streaming Tester incluído para verificar a conexão com a Internet do seu PC para jogos.</translation>
     </message>
     <message>
         <location filename="../gui/PcView.qml" line="339"/>
-        <source>Your PC&apos;s current network connection seems to be blocking Moonlight. Streaming over the Internet may not work while connected to this network.</source>
-        <translation>A conexão de rede atual do seu PC parece estar bloqueando o Moonlight. A transmissão pela Internet pode não funcionar enquanto estiver conectado a esta rede.</translation>
+        <source>Your PC&apos;s current network connection seems to be blocking Hestia. Streaming over the Internet may not work while connected to this network.</source>
+        <translation>A conexão de rede atual do seu PC parece estar bloqueando o Hestia. A transmissão pela Internet pode não funcionar enquanto estiver conectado a esta rede.</translation>
     </message>
     <message>
         <location filename="../gui/PcView.qml" line="339"/>
@@ -303,7 +303,7 @@
     <message>
         <location filename="../gui/PcView.qml" line="331"/>
         <source>The network test could not be performed because none of Moonlight&apos;s connection testing servers were reachable from this PC. Check your Internet connection or try again later.</source>
-        <translation>O teste de rede não pode ser efetuado porque nenhum dos servidores de teste do Moonlight conseguiram ser alcançados desse PC. Verifique sua conexão com a internet ou tente novamente mais tarde.</translation>
+        <translation>O teste de rede não pode ser efetuado porque nenhum dos servidores de teste do Hestia conseguiram ser alcançados desse PC. Verifique sua conexão com a internet ou tente novamente mais tarde.</translation>
     </message>
     <message>
         <location filename="../gui/PcView.qml" line="170"/>
@@ -332,8 +332,8 @@
     </message>
     <message>
         <location filename="../gui/PcView.qml" line="298"/>
-        <source>If your host PC is running Sunshine, navigate to the Sunshine web UI to enter the PIN.</source>
-        <translation>Se seu PC principal estiver rodando Sunshine, navegue até a interface web para digitar o PIN.</translation>
+        <source>If your host PC is running Hermes, Apollo, or Sunshine, navigate to the host web UI to enter the PIN.</source>
+        <translation type="unfinished">Se seu PC principal estiver rodando Sunshine, navegue até a interface web para digitar o PIN.</translation>
     </message>
     <message>
         <location filename="../gui/PcView.qml" line="310"/>
@@ -342,8 +342,8 @@
     </message>
     <message>
         <location filename="../gui/PcView.qml" line="324"/>
-        <source>Moonlight is testing your network connection to determine if any required ports are blocked.</source>
-        <translation>Moonlight está testando sua conexão para determinar se alguma das portas necessárias está bloqueada.</translation>
+        <source>Hestia is testing your network connection to determine if any required ports are blocked.</source>
+        <translation>Hestia está testando sua conexão para determinar se alguma das portas necessárias está bloqueada.</translation>
     </message>
     <message>
         <location filename="../gui/PcView.qml" line="351"/>
@@ -404,8 +404,8 @@
     <message>
         <location filename="../cli/quitstream.cpp" line="88"/>
         <location filename="../cli/startstream.cpp" line="89"/>
-        <source>Computer %1 has not been paired. Please open Moonlight to pair before streaming.</source>
-        <translation>O computador %1 não foi emparelhado. Por favor, abra o Moonlight para emparelhar antes de transmitir.</translation>
+        <source>Computer %1 has not been paired. Please open Hestia to pair before streaming.</source>
+        <translation>O computador %1 não foi emparelhado. Por favor, abra o Hestia para emparelhar antes de transmitir.</translation>
     </message>
     <message>
         <location filename="../cli/quitstream.cpp" line="102"/>
@@ -420,8 +420,8 @@
     </message>
     <message>
         <location filename="../cli/listapps.cpp" line="108"/>
-        <source>Computer %1 has not been paired. Please open Moonlight to pair before retrieving games list.</source>
-        <translation>O computador %1 não foi emparelhado. Por favor, abra o Moonlight para emparelhar antes de recuperar a lista de jogos.</translation>
+        <source>Computer %1 has not been paired. Please open Hestia to pair before retrieving games list.</source>
+        <translation>O computador %1 não foi emparelhado. Por favor, abra o Hestia para emparelhar antes de recuperar a lista de jogos.</translation>
     </message>
 </context>
 <context>
@@ -509,8 +509,8 @@
     </message>
     <message>
         <location filename="../streaming/session.cpp" line="958"/>
-        <source>The version of GeForce Experience on %1 is not supported by this build of Moonlight. You must update Moonlight to stream from %1.</source>
-        <translation>A versão do GeForce Experience no %1 não é suportada por esta compilação do Moonlight. Você deve atualizar o Moonlight para transmitir a partir de %1.</translation>
+        <source>The version of GeForce Experience on %1 is not supported by this build of Hestia. You must update Hestia to stream from %1.</source>
+        <translation>A versão do GeForce Experience no %1 não é suportada por esta compilação do Hestia. Você deve atualizar o Hestia para transmitir a partir de %1.</translation>
     </message>
     <message>
         <location filename="../streaming/session.cpp" line="963"/>
@@ -640,8 +640,8 @@
     </message>
     <message>
         <location filename="../streaming/session.cpp" line="1187"/>
-        <source>An attached gamepad has no mapping and won&apos;t be usable. Visit the Moonlight help to resolve this.</source>
-        <translation>Um gamepad anexado não tem mapeamento e não será utilizável. Visite a ajuda do Moonlight para resolver isso.</translation>
+        <source>An attached gamepad has no mapping and won&apos;t be usable. Visit the Hestia help to resolve this.</source>
+        <translation>Um gamepad anexado não tem mapeamento e não será utilizável. Visite a ajuda do Hestia para resolver isso.</translation>
     </message>
     <message>
         <location filename="../streaming/session.cpp" line="1205"/>
@@ -840,13 +840,13 @@
     </message>
     <message>
         <location filename="../gui/SettingsView.qml" line="929"/>
-        <source>Mute audio stream when Moonlight is not the active window</source>
-        <translation>Silenciar transmissão de áudio quando o Moonlight não é a janela ativa</translation>
+        <source>Mute audio stream when Hestia is not the active window</source>
+        <translation>Silenciar transmissão de áudio quando o Hestia não é a janela ativa</translation>
     </message>
     <message>
         <location filename="../gui/SettingsView.qml" line="940"/>
-        <source>Mutes Moonlight&apos;s audio when you Alt+Tab out of the stream or click on a different window.</source>
-        <translation>Silencia o áudio do Moonlight quando você usar Alt+Tab fora do fluxo ou clica em uma janela diferente.</translation>
+        <source>Mutes Hestia&apos;s audio when you Alt+Tab out of the stream or click on a different window.</source>
+        <translation>Silencia o áudio do Hestia quando você usar Alt+Tab fora do fluxo ou clica em uma janela diferente.</translation>
     </message>
     <message>
         <location filename="../gui/SettingsView.qml" line="989"/>
@@ -865,8 +865,8 @@
     </message>
     <message>
         <location filename="../gui/SettingsView.qml" line="1160"/>
-        <source>You must restart Moonlight for this change to take effect</source>
-        <translation>Você deve reiniciar o Moonlight para que essa alteração entre em vigor</translation>
+        <source>You must restart Hestia for this change to take effect</source>
+        <translation>Você deve reiniciar o Hestia para que essa alteração entre em vigor</translation>
     </message>
     <message>
         <location filename="../gui/SettingsView.qml" line="1177"/>
@@ -945,8 +945,8 @@
     </message>
     <message>
         <location filename="../gui/SettingsView.qml" line="1340"/>
-        <source>NOTE: Certain keyboard shortcuts like Ctrl+Alt+Del on Windows cannot be intercepted by any application, including Moonlight.</source>
-        <translation>NOTA: Certos atalhos de teclado como Ctrl+Alt+Del no Windows não podem ser interceptados por nenhum aplicativo, incluindo o Moonlight.</translation>
+        <source>NOTE: Certain keyboard shortcuts like Ctrl+Alt+Del on Windows cannot be intercepted by any application, including Hestia.</source>
+        <translation>NOTA: Certos atalhos de teclado como Ctrl+Alt+Del no Windows não podem ser interceptados por nenhum aplicativo, incluindo o Hestia.</translation>
     </message>
     <message>
         <location filename="../gui/SettingsView.qml" line="1403"/>
@@ -1000,13 +1000,13 @@
     </message>
     <message>
         <location filename="../gui/SettingsView.qml" line="1501"/>
-        <source>Process gamepad input when Moonlight is in the background</source>
-        <translation>Processe a entrada do controle quando o Moonlight estiver em segundo plano</translation>
+        <source>Process gamepad input when Hestia is in the background</source>
+        <translation>Processe a entrada do controle quando o Hestia estiver em segundo plano</translation>
     </message>
     <message>
         <location filename="../gui/SettingsView.qml" line="1512"/>
-        <source>Allows Moonlight to capture gamepad inputs even if it&apos;s not the current window in focus</source>
-        <translation>Permite que o Moonlight capture as entradas do controle, mesmo que não seja a janela atual em foco</translation>
+        <source>Allows Hestia to capture gamepad inputs even if it&apos;s not the current window in focus</source>
+        <translation>Permite que o Hestia capture as entradas do controle, mesmo que não seja a janela atual em foco</translation>
     </message>
     <message>
         <location filename="../gui/SettingsView.qml" line="949"/>
@@ -1218,8 +1218,8 @@
     </message>
     <message>
         <location filename="../gui/StreamSegue.qml" line="65"/>
-        <source>This PC&apos;s Internet connection is blocking Moonlight. Streaming over the Internet may not work while connected to this network.</source>
-        <translation>A conexão com a Internet deste PC está bloqueando o Moonlight. O streaming pela Internet pode não funcionar enquanto estiver conectado a esta rede.</translation>
+        <source>This PC&apos;s Internet connection is blocking Hestia. Streaming over the Internet may not work while connected to this network.</source>
+        <translation>A conexão com a Internet deste PC está bloqueando o Hestia. O streaming pela Internet pode não funcionar enquanto estiver conectado a esta rede.</translation>
     </message>
     <message>
         <location filename="../gui/StreamSegue.qml" line="168"/>
@@ -1266,8 +1266,8 @@
     </message>
     <message>
         <location filename="../gui/main.qml" line="366"/>
-        <source>Update available for Moonlight: Version %1</source>
-        <translation>Atualização disponível para Moonlight: Versão %1</translation>
+        <source>Update available for Hestia: Version %1</source>
+        <translation>Atualização disponível para Hestia: Versão %1</translation>
     </message>
     <message>
         <location filename="../gui/main.qml" line="413"/>
@@ -1281,13 +1281,13 @@
     </message>
     <message>
         <location filename="../gui/main.qml" line="468"/>
-        <source>This version of Moonlight isn&apos;t optimized for your PC. Please download the &apos;%1&apos; version of Moonlight for the best streaming performance.</source>
-        <translation>Esta versão do Moonlight não é otimizada para o seu PC. Faça o download da versão &apos;%1&apos; do Moonlight para o melhor desempenho de streaming.</translation>
+        <source>This version of Hestia isn&apos;t optimized for your PC. Please download the &apos;%1&apos; version of Hestia for the best streaming performance.</source>
+        <translation>Esta versão do Hestia não é otimizada para o seu PC. Faça o download da versão &apos;%1&apos; do Hestia para o melhor desempenho de streaming.</translation>
     </message>
     <message>
         <location filename="../gui/main.qml" line="477"/>
-        <source>Moonlight detected gamepads without a mapping:</source>
-        <translation>Moonlight detectou controles sem um mapeamento:</translation>
+        <source>Hestia detected gamepads without a mapping:</source>
+        <translation>Hestia detectou controles sem um mapeamento:</translation>
     </message>
     <message>
         <location filename="../gui/main.qml" line="390"/>
@@ -1296,8 +1296,8 @@
     </message>
     <message>
         <location filename="../gui/main.qml" line="451"/>
-        <source>No functioning hardware accelerated video decoder was detected by Moonlight. Your streaming performance may be severely degraded in this configuration.</source>
-        <translation>Nenhum decodificador de vídeo acelerado por hardware em funcionamento foi detectado pelo Moonlight. Seu desempenho de streaming pode ser severamente degradado nesta configuração.</translation>
+        <source>No functioning hardware accelerated video decoder was detected by Hestia. Your streaming performance may be severely degraded in this configuration.</source>
+        <translation>Nenhum decodificador de vídeo acelerado por hardware em funcionamento foi detectado pelo Hestia. Seu desempenho de streaming pode ser severamente degradado nesta configuração.</translation>
     </message>
     <message>
         <location filename="../gui/main.qml" line="453"/>

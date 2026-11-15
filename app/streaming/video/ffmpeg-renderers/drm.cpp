@@ -1022,7 +1022,7 @@ int DrmRenderer::getRendererAttributes()
                         SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
                                     "Streaming resolution is limited to 1080p on the Pi 4 inside the desktop environment!");
                         SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
-                                    "Run Moonlight directly from the console to stream above 1080p resolution!");
+                                    "Run Hestia directly from the console to stream above 1080p resolution!");
                         attributes |= RENDERER_ATTRIBUTE_1080P_MAX;
                         break;
                     }

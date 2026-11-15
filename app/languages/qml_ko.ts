@@ -227,8 +227,8 @@
     </message>
     <message>
         <location filename="../gui/PcView.qml" line="66"/>
-        <source>This PC&apos;s Internet connection is blocking Moonlight. Streaming over the Internet may not work while connected to this network.</source>
-        <translation>이 PC의 인터넷 연결이 Moonlight를 차단하고 있습니다. 이 네트워크에 연결되어 있으면 인터넷을 통한 스트리밍이 작동하지 않을 수 있습니다.</translation>
+        <source>This PC&apos;s Internet connection is blocking Hestia. Streaming over the Internet may not work while connected to this network.</source>
+        <translation>이 PC의 인터넷 연결이 Hestia를 차단하고 있습니다. 이 네트워크에 연결되어 있으면 인터넷을 통한 스트리밍이 작동하지 않을 수 있습니다.</translation>
     </message>
     <message>
         <location filename="../gui/PcView.qml" line="69"/>
@@ -272,8 +272,8 @@
     </message>
     <message>
         <location filename="../gui/PcView.qml" line="225"/>
-        <source>The version of GeForce Experience on %1 is not supported by this build of Moonlight. You must update Moonlight to stream from %1.</source>
-        <translation>%1의 GeForce Experience 버전은 현재 빌드의 Moonlight에서 지원되지 않습니다. %1에서 스트리밍하려면 Moonlight를 업데이트 해야 합니다.</translation>
+        <source>The version of GeForce Experience on %1 is not supported by this build of Hestia. You must update Hestia to stream from %1.</source>
+        <translation>%1의 GeForce Experience 버전은 현재 빌드의 Hestia에서 지원되지 않습니다. %1에서 스트리밍하려면 Hestia를 업데이트 해야 합니다.</translation>
     </message>
     <message>
         <location filename="../gui/PcView.qml" line="324"/>
@@ -282,8 +282,8 @@
     </message>
     <message>
         <location filename="../gui/PcView.qml" line="335"/>
-        <source>This network does not appear to be blocking Moonlight. If you still have trouble connecting, check your PC&apos;s firewall settings.</source>
-        <translation>이 네트워크는 Moonlight를 차단하지 않는 것 같습니다. 여전히 연결에 문제가 있으면 PC의 방화벽 설정을 확인하십시오.</translation>
+        <source>This network does not appear to be blocking Hestia. If you still have trouble connecting, check your PC&apos;s firewall settings.</source>
+        <translation>이 네트워크는 Hestia를 차단하지 않는 것 같습니다. 여전히 연결에 문제가 있으면 PC의 방화벽 설정을 확인하십시오.</translation>
     </message>
     <message>
         <location filename="../gui/PcView.qml" line="335"/>
@@ -292,8 +292,8 @@
     </message>
     <message>
         <location filename="../gui/PcView.qml" line="339"/>
-        <source>Your PC&apos;s current network connection seems to be blocking Moonlight. Streaming over the Internet may not work while connected to this network.</source>
-        <translation>PC의 현재 네트워크 연결이 Moonlight를 차단하는 것 같습니다. 이 네트워크에 연결되어 있으면 인터넷을 통한 스트리밍이 작동하지 않을 수 있습니다.</translation>
+        <source>Your PC&apos;s current network connection seems to be blocking Hestia. Streaming over the Internet may not work while connected to this network.</source>
+        <translation>PC의 현재 네트워크 연결이 Hestia를 차단하는 것 같습니다. 이 네트워크에 연결되어 있으면 인터넷을 통한 스트리밍이 작동하지 않을 수 있습니다.</translation>
     </message>
     <message>
         <location filename="../gui/PcView.qml" line="339"/>
@@ -303,7 +303,7 @@
     <message>
         <location filename="../gui/PcView.qml" line="331"/>
         <source>The network test could not be performed because none of Moonlight&apos;s connection testing servers were reachable from this PC. Check your Internet connection or try again later.</source>
-        <translation>이 PC에서 Moonlight의 연결 테스트 서버에 연결할 수 없기 때문에 네트워크 검사를 수행할 수 없습니다. 인터넷 연결을 확인하거나 나중에 다시 시도하십시오.</translation>
+        <translation>이 PC에서 Hestia의 연결 테스트 서버에 연결할 수 없기 때문에 네트워크 검사를 수행할 수 없습니다. 인터넷 연결을 확인하거나 나중에 다시 시도하십시오.</translation>
     </message>
     <message>
         <location filename="../gui/PcView.qml" line="170"/>
@@ -332,8 +332,8 @@
     </message>
     <message>
         <location filename="../gui/PcView.qml" line="298"/>
-        <source>If your host PC is running Sunshine, navigate to the Sunshine web UI to enter the PIN.</source>
-        <translation>호스트 PC에서 Sunshine을 실행 중인 경우 Sunshine 웹 UI로 이동하여 PIN을 입력합니다.</translation>
+        <source>If your host PC is running Hermes, Apollo, or Sunshine, navigate to the host web UI to enter the PIN.</source>
+        <translation type="unfinished">호스트 PC에서 Sunshine을 실행 중인 경우 Sunshine 웹 UI로 이동하여 PIN을 입력합니다.</translation>
     </message>
     <message>
         <location filename="../gui/PcView.qml" line="310"/>
@@ -342,8 +342,8 @@
     </message>
     <message>
         <location filename="../gui/PcView.qml" line="324"/>
-        <source>Moonlight is testing your network connection to determine if any required ports are blocked.</source>
-        <translation>Moonlight는 필요한 포트가 차단되었는지 확인하기 위해 네트워크 연결을 테스트하고 있습니다.</translation>
+        <source>Hestia is testing your network connection to determine if any required ports are blocked.</source>
+        <translation>Hestia는 필요한 포트가 차단되었는지 확인하기 위해 네트워크 연결을 테스트하고 있습니다.</translation>
     </message>
     <message>
         <location filename="../gui/PcView.qml" line="351"/>
@@ -404,8 +404,8 @@
     <message>
         <location filename="../cli/quitstream.cpp" line="88"/>
         <location filename="../cli/startstream.cpp" line="89"/>
-        <source>Computer %1 has not been paired. Please open Moonlight to pair before streaming.</source>
-        <translation>컴퓨터 %1이(가) 페어링되지 않았습니다. 스트리밍하기 전에 Moonlight를 열고 페어링하십시오.</translation>
+        <source>Computer %1 has not been paired. Please open Hestia to pair before streaming.</source>
+        <translation>컴퓨터 %1이(가) 페어링되지 않았습니다. 스트리밍하기 전에 Hestia를 열고 페어링하십시오.</translation>
     </message>
     <message>
         <location filename="../cli/quitstream.cpp" line="102"/>
@@ -420,8 +420,8 @@
     </message>
     <message>
         <location filename="../cli/listapps.cpp" line="108"/>
-        <source>Computer %1 has not been paired. Please open Moonlight to pair before retrieving games list.</source>
-        <translation>컴퓨터 %1이(가) 페어링되지 않았습니다. 게임 목록을 검색하기 전에 Moonlight를 열어 페어링하십시오.</translation>
+        <source>Computer %1 has not been paired. Please open Hestia to pair before retrieving games list.</source>
+        <translation>컴퓨터 %1이(가) 페어링되지 않았습니다. 게임 목록을 검색하기 전에 Hestia를 열어 페어링하십시오.</translation>
     </message>
 </context>
 <context>
@@ -509,8 +509,8 @@
     </message>
     <message>
         <location filename="../streaming/session.cpp" line="958"/>
-        <source>The version of GeForce Experience on %1 is not supported by this build of Moonlight. You must update Moonlight to stream from %1.</source>
-        <translation>%1의 GeForce Experience 버전은 이 빌드의 Moonlight에서 지원되지 않습니다. %1에서 스트리밍하려면 Moonlight를 업데이트 해야 합니다.</translation>
+        <source>The version of GeForce Experience on %1 is not supported by this build of Hestia. You must update Hestia to stream from %1.</source>
+        <translation>%1의 GeForce Experience 버전은 이 빌드의 Hestia에서 지원되지 않습니다. %1에서 스트리밍하려면 Hestia를 업데이트 해야 합니다.</translation>
     </message>
     <message>
         <location filename="../streaming/session.cpp" line="963"/>
@@ -640,8 +640,8 @@
     </message>
     <message>
         <location filename="../streaming/session.cpp" line="1187"/>
-        <source>An attached gamepad has no mapping and won&apos;t be usable. Visit the Moonlight help to resolve this.</source>
-        <translation>연결된 게임 패드에 매핑이 없으며 사용할 수 없습니다. 이 문제를 해결하려면 Moonlight 도움말을 방문하십시오.</translation>
+        <source>An attached gamepad has no mapping and won&apos;t be usable. Visit the Hestia help to resolve this.</source>
+        <translation>연결된 게임 패드에 매핑이 없으며 사용할 수 없습니다. 이 문제를 해결하려면 Hestia 도움말을 방문하십시오.</translation>
     </message>
     <message>
         <location filename="../streaming/session.cpp" line="1205"/>
@@ -840,13 +840,13 @@
     </message>
     <message>
         <location filename="../gui/SettingsView.qml" line="929"/>
-        <source>Mute audio stream when Moonlight is not the active window</source>
-        <translation>Moonlight가 활성 창이 아닌 경우 오디오 스트림을 음소거</translation>
+        <source>Mute audio stream when Hestia is not the active window</source>
+        <translation>Hestia가 활성 창이 아닌 경우 오디오 스트림을 음소거</translation>
     </message>
     <message>
         <location filename="../gui/SettingsView.qml" line="940"/>
-        <source>Mutes Moonlight&apos;s audio when you Alt+Tab out of the stream or click on a different window.</source>
-        <translation>스트림에서 Alt+Tab을 누르거나 다른 창을 클릭하면 Moonlight의 오디오를 음소거합니다.</translation>
+        <source>Mutes Hestia&apos;s audio when you Alt+Tab out of the stream or click on a different window.</source>
+        <translation>스트림에서 Alt+Tab을 누르거나 다른 창을 클릭하면 Hestia의 오디오를 음소거합니다.</translation>
     </message>
     <message>
         <location filename="../gui/SettingsView.qml" line="989"/>
@@ -865,8 +865,8 @@
     </message>
     <message>
         <location filename="../gui/SettingsView.qml" line="1160"/>
-        <source>You must restart Moonlight for this change to take effect</source>
-        <translation>이 변경 사항을 적용하려면 Moonlight를 다시 시작해야합니다</translation>
+        <source>You must restart Hestia for this change to take effect</source>
+        <translation>이 변경 사항을 적용하려면 Hestia를 다시 시작해야합니다</translation>
     </message>
     <message>
         <location filename="../gui/SettingsView.qml" line="1177"/>
@@ -945,8 +945,8 @@
     </message>
     <message>
         <location filename="../gui/SettingsView.qml" line="1340"/>
-        <source>NOTE: Certain keyboard shortcuts like Ctrl+Alt+Del on Windows cannot be intercepted by any application, including Moonlight.</source>
-        <translation>참고: Windows의 Ctrl+Alt+Del과 같은 특정 키보드 단축키는 Moonlight를 포함한 모든 응용 프로그램에서 가로챌 수 없습니다.</translation>
+        <source>NOTE: Certain keyboard shortcuts like Ctrl+Alt+Del on Windows cannot be intercepted by any application, including Hestia.</source>
+        <translation>참고: Windows의 Ctrl+Alt+Del과 같은 특정 키보드 단축키는 Hestia를 포함한 모든 응용 프로그램에서 가로챌 수 없습니다.</translation>
     </message>
     <message>
         <location filename="../gui/SettingsView.qml" line="1403"/>
@@ -1000,13 +1000,13 @@
     </message>
     <message>
         <location filename="../gui/SettingsView.qml" line="1501"/>
-        <source>Process gamepad input when Moonlight is in the background</source>
-        <translation>Moonlight가 백그라운드에 있을 때 게임패드 입력 처리</translation>
+        <source>Process gamepad input when Hestia is in the background</source>
+        <translation>Hestia가 백그라운드에 있을 때 게임패드 입력 처리</translation>
     </message>
     <message>
         <location filename="../gui/SettingsView.qml" line="1512"/>
-        <source>Allows Moonlight to capture gamepad inputs even if it&apos;s not the current window in focus</source>
-        <translation>Moonlight가 현재 초점이 맞춰진 창이 아닌 경우에도 게임패드 입력을 캡처할 수 있습니다</translation>
+        <source>Allows Hestia to capture gamepad inputs even if it&apos;s not the current window in focus</source>
+        <translation>Hestia가 현재 초점이 맞춰진 창이 아닌 경우에도 게임패드 입력을 캡처할 수 있습니다</translation>
     </message>
     <message>
         <location filename="../gui/SettingsView.qml" line="949"/>
@@ -1218,8 +1218,8 @@
     </message>
     <message>
         <location filename="../gui/StreamSegue.qml" line="65"/>
-        <source>This PC&apos;s Internet connection is blocking Moonlight. Streaming over the Internet may not work while connected to this network.</source>
-        <translation>이 PC의 인터넷 연결이 Moonlight를 차단하고 있습니다. 이 네트워크에 연결되어 있으면 인터넷을 통한 스트리밍이 작동하지 않을 수 있습니다.</translation>
+        <source>This PC&apos;s Internet connection is blocking Hestia. Streaming over the Internet may not work while connected to this network.</source>
+        <translation>이 PC의 인터넷 연결이 Hestia를 차단하고 있습니다. 이 네트워크에 연결되어 있으면 인터넷을 통한 스트리밍이 작동하지 않을 수 있습니다.</translation>
     </message>
     <message>
         <location filename="../gui/StreamSegue.qml" line="168"/>
@@ -1266,8 +1266,8 @@
     </message>
     <message>
         <location filename="../gui/main.qml" line="366"/>
-        <source>Update available for Moonlight: Version %1</source>
-        <translation>Moonlight 업데이트 가능: 버전 %1</translation>
+        <source>Update available for Hestia: Version %1</source>
+        <translation>Hestia 업데이트 가능: 버전 %1</translation>
     </message>
     <message>
         <location filename="../gui/main.qml" line="413"/>
@@ -1281,13 +1281,13 @@
     </message>
     <message>
         <location filename="../gui/main.qml" line="468"/>
-        <source>This version of Moonlight isn&apos;t optimized for your PC. Please download the &apos;%1&apos; version of Moonlight for the best streaming performance.</source>
-        <translation>이 버전의 Moonlight는 해당 PC에 최적화되어 있지 않습니다. 최상의 스트리밍 성능을 위해 Moonlight &apos;%1&apos;버전을 다운로드하십시오.</translation>
+        <source>This version of Hestia isn&apos;t optimized for your PC. Please download the &apos;%1&apos; version of Hestia for the best streaming performance.</source>
+        <translation>이 버전의 Hestia는 해당 PC에 최적화되어 있지 않습니다. 최상의 스트리밍 성능을 위해 Hestia &apos;%1&apos;버전을 다운로드하십시오.</translation>
     </message>
     <message>
         <location filename="../gui/main.qml" line="477"/>
-        <source>Moonlight detected gamepads without a mapping:</source>
-        <translation>Moonlight가 매핑없는 게임패드를 감지했습니다:</translation>
+        <source>Hestia detected gamepads without a mapping:</source>
+        <translation>Hestia가 매핑없는 게임패드를 감지했습니다:</translation>
     </message>
     <message>
         <location filename="../gui/main.qml" line="390"/>
@@ -1296,8 +1296,8 @@
     </message>
     <message>
         <location filename="../gui/main.qml" line="451"/>
-        <source>No functioning hardware accelerated video decoder was detected by Moonlight. Your streaming performance may be severely degraded in this configuration.</source>
-        <translation>Moonlight에서 작동하는 하드웨어 가속 비디오 디코더가 감지되지 않았습니다. 이 구성에서는 스트리밍 성능이 심각하게 저하될 수 있습니다.</translation>
+        <source>No functioning hardware accelerated video decoder was detected by Hestia. Your streaming performance may be severely degraded in this configuration.</source>
+        <translation>Hestia에서 작동하는 하드웨어 가속 비디오 디코더가 감지되지 않았습니다. 이 구성에서는 스트리밍 성능이 심각하게 저하될 수 있습니다.</translation>
     </message>
     <message>
         <location filename="../gui/main.qml" line="453"/>

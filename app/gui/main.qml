@@ -156,9 +156,9 @@ ApplicationWindow {
     }
 
     // This timer keeps us polling for 5 minutes of inactivity
-    // to allow the user to work with Moonlight on a second display
+    // to allow the user to work with Hestia on a second display
     // while dealing with configuration issues. This will ensure
-    // machines come online even if the input focus isn't on Moonlight.
+    // machines come online even if the input focus isn't on Hestia.
     Timer {
         id: inactivityTimer
         interval: 5 * 60000
@@ -428,7 +428,7 @@ ApplicationWindow {
 
     ErrorMessageDialog {
         id: noHwDecoderDialog
-        text: qsTr("No functioning hardware accelerated video decoder was detected by Moonlight. " +
+        text: qsTr("No functioning hardware accelerated video decoder was detected by Hestia. " +
                    "Your streaming performance may be severely degraded in this configuration.")
         helpText: qsTr("Click the Help button for more information on solving this problem.")
         helpUrl: "https://github.com/moonlight-stream/moonlight-docs/wiki/Fixing-Hardware-Decoding-Problems"
@@ -454,7 +454,7 @@ ApplicationWindow {
     ErrorMessageDialog {
         id: unmappedGamepadDialog
         property string unmappedGamepads : ""
-        text: qsTr("Moonlight detected gamepads without a mapping:") + "\n" + unmappedGamepads
+        text: qsTr("Hestia detected gamepads without a mapping:") + "\n" + unmappedGamepads
         helpTextSeparator: "\n\n"
         helpText: qsTr("Click the Help button for information on how to map your gamepads.")
         helpUrl: "https://github.com/moonlight-stream/moonlight-docs/wiki/Gamepad-Mapping"
